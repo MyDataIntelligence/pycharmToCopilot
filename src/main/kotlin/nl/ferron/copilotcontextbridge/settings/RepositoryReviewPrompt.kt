@@ -9,7 +9,7 @@ object RepositoryReviewPrompt {
     fun skill() =
         AppSettings.PromptSkillState(
             ID,
-            "Repository code review",
+            "Review code",
             "Review reuse, unnecessary code, repository guidelines, correctness, safety and tests.",
             """
             Je bent de Copilot Repository Code Reviewer. Voer een grondige, evidence-based review uit op de

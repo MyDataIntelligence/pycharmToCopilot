@@ -5,6 +5,7 @@ import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
+import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import com.intellij.psi.codeStyle.CodeStyleManager
@@ -42,7 +43,12 @@ class PythonFunctionReplacementService(
                 val safe =
                     target.validated.status in setOf(ReplacementStatus.MATCH, ReplacementStatus.NEW) ||
                         (target.validated.status == ReplacementStatus.CHANGED && key in forcedNames)
-                val structurallyReady = target.parsed != null && (target.function != null || target.insertionParent != null)
+                val structurallyReady =
+                    when (target.validated.request.operation) {
+                        "add_file" -> target.fileOperationReady && target.file != null && target.fileParent != null
+                        "delete_file" -> target.fileOperationReady && target.file != null
+                        else -> target.parsed != null && (target.function != null || target.insertionParent != null)
+                    }
                 if (!selected || !safe || !structurallyReady) {
                     skipped += "${target.validated.request.path}:$name — ${target.validated.status}"
                     false
@@ -53,8 +59,16 @@ class PythonFunctionReplacementService(
 
         fun replace(target: PatchValidator.Target) {
             try {
+                val operation = target.validated.request.operation
+                if (operation == "delete_file") {
+                    target.file!!.delete()
+                    applied += "${target.validated.request.path}:${target.validated.request.qualifiedName}"
+                    return
+                }
                 val replaced =
-                    if (target.validated.status == ReplacementStatus.NEW) {
+                    if (operation == "add_file") {
+                        createFile(target)
+                    } else if (target.validated.status == ReplacementStatus.NEW) {
                         val container =
                             when (val parent = target.insertionParent) {
                                 is PyFile -> parent
@@ -91,18 +105,38 @@ class PythonFunctionReplacementService(
             WriteCommandAction.writeCommandAction(project).withName("Apply Copilot function replacements").run<RuntimeException> {
                 eligible.forEach(::replace)
                 PsiDocumentManager.getInstance(project).commitAllDocuments()
+                if (settings.optimizeImports && failures.isEmpty()) optimizeImports(affectedFiles)
             }
         } else {
             eligible.forEach { target ->
                 WriteCommandAction.writeCommandAction(project).withName("Apply Copilot function replacement").run<RuntimeException> {
                     replace(target)
                     PsiDocumentManager.getInstance(project).commitAllDocuments()
+                    if (settings.optimizeImports && failures.isEmpty()) optimizeImports(affectedFiles)
                 }
             }
         }
-        if (settings.optimizeImports && failures.isEmpty()) {
-            affectedFiles.forEach { file -> OptimizeImportsProcessor(project, file).run() }
-        }
         return ApplyResult(applied, skipped, failures)
+    }
+
+    private fun createFile(target: PatchValidator.Target): PsiFile {
+        val directory: PsiDirectory = target.fileParent ?: error("Target parent directory no longer exists.")
+        val fileName =
+            target.validated.request.path
+                .replace('\\', '/')
+                .substringAfterLast('/')
+        check(directory.findFile(fileName) == null) { "Target file already exists." }
+        val created = directory.createFile(fileName)
+        val document =
+            PsiDocumentManager.getInstance(project).getDocument(created)
+                ?: error("Could not create an editable document for the new file.")
+        document.setText(target.validated.newText)
+        PsiDocumentManager.getInstance(project).commitDocument(document)
+        return created
+    }
+
+    private fun optimizeImports(files: Collection<PsiFile>) {
+        files.forEach { file -> OptimizeImportsProcessor(project, file).runWithoutProgress() }
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
     }
 }

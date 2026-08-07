@@ -1,11 +1,86 @@
 # `.copilotpatch` format v1
 
-The primary format is JSON. Required root fields are `formatVersion: 1`, `repositoryId`, `sessionId`, `summary`, and one or more `replacements`.
+The primary format is UTF-8 JSON. The importer also accepts `.json` only after schema sniffing, and ZIP packages with `changes.json` at archive root. Required root fields are `formatVersion: 1`, `repositoryId`, `sessionId`, and one or more entries in `replacements`. `summary` is strongly recommended.
 
-`replace_function` requires `path`, `qualifiedName`, `originalHash`, and `replacement` (or ZIP `replacementFile`). `add_function` omits the hash and requires `parentQualifiedName`; an empty parent means module level. `insertAfterQualifiedName` is optional. Async or classmethod/staticmethod changes require explicit allow flags.
+## Operations
 
-The summary template contains `overview`, `functions[{path,qualifiedName,change,reason}]`, `testsPerformed`, `risks`, and `limitations`. “Not run” must be used instead of claiming tests that were not executed.
+### `replace_function`
 
-ZIP uses `changes.json` at root and snippets below `replacements/`; `CHANGE_SUMMARY.md` is recommended. Limits: 20 MB archive, 50 MB expanded, 10 MB per entry, 100 entries and 50 operations. Traversal and absolute ZIP entries are rejected.
+Requires `path`, `qualifiedName`, exported `originalHash`, and complete function source in `replacement` (or ZIP `replacementFile`). The source must contain exactly one complete function including decorators, signature, type hints, docstring and body.
 
-The machine-readable schema is in `docs/schema/copilotpatch-v1.schema.json`.
+### `add_function`
+
+Requires `path`, `qualifiedName`, `parentQualifiedName`, and complete function source. Empty `parentQualifiedName` means module level. `insertAfterQualifiedName` is optional. Async/decorator-kind changes require explicit allow flags where applicable.
+
+### `add_file`
+
+Requires a new repository-relative `path` and complete file content in `replacement` or `replacementFile`. `qualifiedName` may be omitted and is represented internally as `<file>`. The target must not already exist. Parent traversal, absolute paths and repository/symlink escape are rejected.
+
+### `delete_file`
+
+Requires an existing repository-relative `path` and exported `originalHash`. It must not contain replacement content. The hash protects against deletion after local changes. Deletion is individually previewed and selected; it is never inferred from an omitted response.
+
+## Example
+
+```json
+{
+  "formatVersion": 1,
+  "repositoryId": "fabric-deployment",
+  "sessionId": "20260806_202500_ab12cd",
+  "summary": {
+    "overview": "Improve submission validation and add a focused helper.",
+    "functions": [
+      {
+        "path": "scripts/functions/livy.py",
+        "qualifiedName": "submit_batch",
+        "change": "replace",
+        "reason": "Validate requests before sending"
+      }
+    ],
+    "testsPerformed": ["Not run: execution environment unavailable"],
+    "risks": [],
+    "limitations": []
+  },
+  "replacements": [
+    {
+      "operation": "replace_function",
+      "path": "scripts/functions/livy.py",
+      "qualifiedName": "submit_batch",
+      "originalHash": "sha256:812bf...",
+      "replacement": "def submit_batch(request: LivyBatchRequest) -> str:\n    \"\"\"Submit a Livy batch.\"\"\"\n    ...\n"
+    },
+    {
+      "operation": "add_file",
+      "path": "tests/test_new_helper.py",
+      "replacement": "def test_new_helper() -> None:\n    ...\n"
+    }
+  ]
+}
+```
+
+## Summary contract
+
+`summary` contains `overview`, `functions[{path,qualifiedName,change,reason}]`, `testsPerformed`, `risks`, and `limitations`. Use “Not run: <reason>” instead of claiming a test or validation that was not actually executed.
+
+## ZIP form
+
+ZIP uses:
+
+```text
+copilot-result.zip
+├── changes.json
+├── CHANGE_SUMMARY.md          (recommended)
+└── replacements/
+    ├── 001_submit_batch.py
+    └── 002_test_new_helper.py
+```
+
+`replacementFile` paths are archive-relative and must stay within `replacements/`. Limits are 20 MB compressed archive, 50 MB expanded, 10 MB per entry, 100 entries and 50 operations. Absolute paths, traversal, symlink-like escapes, duplicate unsafe entries and oversized expansion are rejected.
+
+## Validation and preview states
+
+Function identity uses repository-relative path, qualified parent/function chain, function kind and exported hash—not line numbers. States are `MATCH`, `NEW`, `CHANGED`, `MISSING`, `AMBIGUOUS`, and `INVALID`.
+
+Native PyCharm two-way diff is used for safe replacements/additions/deletions. When exported base text exists and local text changed, the importer can display three sides: `BASE (exported)`, `CURRENT (local)`, `PROPOSED (Copilot)`. Apply revalidates immediately before the write command. Only explicitly selected safe or explicitly resolved conflict operations run, and Undo restores the transaction.
+
+The machine-readable schema is [schema/copilotpatch-v1.schema.json](schema/copilotpatch-v1.schema.json). The schema and parser must remain in sync; release tests reject drift.

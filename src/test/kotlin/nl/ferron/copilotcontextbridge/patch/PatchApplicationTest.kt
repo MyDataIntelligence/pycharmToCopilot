@@ -135,6 +135,145 @@ class PatchApplicationTest : BasePlatformTestCase() {
         assertEquals(listOf("module.py:work"), forced.applied)
     }
 
+    fun testAddsCompletePythonFileAndSupportsUndo() {
+        val existing = myFixture.addFileToProject("src/existing.py", "VALUE = 1\n")
+        val request =
+            FunctionReplacement(
+                operation = "add_file",
+                path = "src/generated.py",
+                qualifiedName = FILE_OPERATION_QUALIFIED_NAME,
+                originalHash = null,
+                replacement = "def generated() -> int:\n    return 42\n",
+                replacementFile = null,
+            )
+
+        val validation =
+            PatchValidator(
+                project,
+                testRepositoryId = "fixture-repository",
+                testRootVirtualFile = rootOf("src/existing.py", existing as PyFile),
+            ).validate(patch(request))
+        assertEquals(
+            validation.targets
+                .single()
+                .validated
+                .toString(),
+            ReplacementStatus.NEW,
+            validation.targets
+                .single()
+                .validated.status,
+        )
+
+        val result =
+            PythonFunctionReplacementService(project).apply(
+                validation,
+                setOf("src/generated.py::$FILE_OPERATION_QUALIFIED_NAME"),
+                emptySet(),
+            )
+
+        assertEquals(listOf("src/generated.py:$FILE_OPERATION_QUALIFIED_NAME"), result.applied)
+        val created = myFixture.findFileInTempDir("src/generated.py")
+        assertNotNull(created)
+        assertTrue(
+            PsiManager
+                .getInstance(project)
+                .findFile(created)!!
+                .text
+                .contains("return 42"),
+        )
+        assertTrue(UndoManager.getInstance(project).isUndoAvailable(null))
+    }
+
+    fun testRejectsInvalidPythonForNewFile() {
+        val existing = myFixture.addFileToProject("src/existing.py", "VALUE = 1\n") as PyFile
+        val request =
+            FunctionReplacement(
+                "add_file",
+                "src/broken.py",
+                FILE_OPERATION_QUALIFIED_NAME,
+                null,
+                "def broken(:\n",
+                null,
+            )
+
+        val validation =
+            PatchValidator(project, testRepositoryId = "fixture-repository", testRootVirtualFile = rootOf("src/existing.py", existing))
+                .validate(patch(request))
+
+        assertEquals(
+            ReplacementStatus.INVALID,
+            validation.targets
+                .single()
+                .validated.status,
+        )
+    }
+
+    fun testDeletesCompleteFileOnlyWhenExactHashMatches() {
+        val file = myFixture.addFileToProject("src/obsolete.py", "VALUE = 'obsolete'\n") as PyFile
+        val request =
+            FunctionReplacement(
+                "delete_file",
+                "src/obsolete.py",
+                FILE_OPERATION_QUALIFIED_NAME,
+                FileContentHasher.hash(file.text),
+                null,
+                null,
+            )
+        val validation = validator(request.path, file).validate(patch(request))
+        assertEquals(
+            validation.targets
+                .single()
+                .validated
+                .toString(),
+            ReplacementStatus.MATCH,
+            validation.targets
+                .single()
+                .validated.status,
+        )
+
+        val result =
+            PythonFunctionReplacementService(project).apply(
+                validation,
+                setOf("src/obsolete.py::$FILE_OPERATION_QUALIFIED_NAME"),
+                emptySet(),
+            )
+
+        assertEquals(listOf("src/obsolete.py:$FILE_OPERATION_QUALIFIED_NAME"), result.applied)
+        assertNull(myFixture.findFileInTempDir("src/obsolete.py"))
+        assertTrue(UndoManager.getInstance(project).isUndoAvailable(null))
+    }
+
+    fun testChangedFileHashRequiresForceBeforeDelete() {
+        val file = myFixture.addFileToProject("src/changed.py", "VALUE = 2\n") as PyFile
+        val request =
+            FunctionReplacement(
+                "delete_file",
+                "src/changed.py",
+                FILE_OPERATION_QUALIFIED_NAME,
+                FileContentHasher.hash("VALUE = 1\n"),
+                null,
+                null,
+            )
+        val validation = validator(request.path, file).validate(patch(request))
+        val key = "src/changed.py::$FILE_OPERATION_QUALIFIED_NAME"
+
+        assertEquals(
+            validation.targets
+                .single()
+                .validated
+                .toString(),
+            ReplacementStatus.CHANGED,
+            validation.targets
+                .single()
+                .validated.status,
+        )
+        assertEmpty(PythonFunctionReplacementService(project).apply(validation, setOf(key), emptySet()).applied)
+        assertEquals(
+            listOf("src/changed.py:$FILE_OPERATION_QUALIFIED_NAME"),
+            PythonFunctionReplacementService(project).apply(validation, setOf(key), setOf(key)).applied,
+        )
+    }
+
     fun testAppliesMultipleFunctionsAcrossFilesAndPreservesUnselectedFunction() {
         val first =
             myFixture.addFileToProject(
@@ -165,10 +304,12 @@ class PatchApplicationTest : BasePlatformTestCase() {
     }
 
     fun testOptimizeImportsRunsOnlyWhenExplicitlyEnabled() {
+        myFixture.addFileToProject("src/used_module.py", "VALUE = True\n")
+        myFixture.addFileToProject("src/unused_module.py", "VALUE = False\n")
         val file =
             myFixture.addFileToProject(
                 "src/imports.py",
-                "import json\nimport pathlib\n\ndef run():\n    return json.dumps({'ok': True})\n",
+                "import used_module\nimport unused_module\n\ndef run():\n    return used_module.VALUE\n",
             ) as PyFile
         PsiTestUtil.addSourceRoot(module, file.virtualFile.parent)
         val request =
@@ -176,15 +317,15 @@ class PatchApplicationTest : BasePlatformTestCase() {
                 "src/imports.py",
                 file,
                 "run",
-                "def run():\n    return json.dumps({'ok': False})\n",
+                "def run():\n    return not used_module.VALUE\n",
             )
         val validation = validator(request.path, file).validate(patch(request))
         project.getService(ProjectSettings::class.java).state.optimizeImports = true
 
         PythonFunctionReplacementService(project).apply(validation, setOf("src/imports.py::run"), emptySet())
 
-        assertTrue(file.text.contains("import json"))
-        assertFalse(file.text.contains("import pathlib"))
+        assertTrue(file.text.contains("import used_module"))
+        assertFalse(file.text.contains("import unused_module"))
     }
 
     private fun replacement(
@@ -200,7 +341,21 @@ class PatchApplicationTest : BasePlatformTestCase() {
     private fun validator(
         relativePath: String,
         file: PyFile,
-    ) = PatchValidator(project, { requested -> file.takeIf { requested == relativePath } }, "fixture-repository")
+    ) = PatchValidator(
+        project,
+        { requested -> file.takeIf { requested == relativePath } },
+        "fixture-repository",
+        rootOf(relativePath, file),
+    )
+
+    private fun rootOf(
+        relativePath: String,
+        file: PyFile,
+    ): com.intellij.openapi.vfs.VirtualFile {
+        var current = file.virtualFile
+        repeat(relativePath.replace('\\', '/').split('/').size) { current = current.parent }
+        return current
+    }
 
     private fun patch(vararg requests: FunctionReplacement): CopilotPatch =
         CopilotPatch(

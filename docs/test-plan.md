@@ -1,54 +1,60 @@
-# Copilot Context Bridge test plan
+# Copilot Context Bridge release test plan
 
-This checklist is the release gate for the simplified main workflow and the complete plugin.
+This checklist records gates, not current results. Leave a box unchecked until current command output or live evidence proves it.
 
 ## Automated gates
 
-- [x] Kotlin compilation and instrumentation succeed on JDK 21.
+- [x] Clean Kotlin/Java compilation and instrumentation succeed with the configured JDK 21 toolchain.
+- [x] All 105 unit and PSI/platform tests pass with no skipped tests.
 - [x] Ktlint/static checks pass.
-- [x] All 37 unit and PSI/platform tests pass.
-- [x] Plugin ZIP builds successfully.
-- [x] Plugin Verifier reports compatible for PyCharm 2025.1, 2025.2 Professional/Community and 2026.2.
-- [x] Installer build and atomic installation succeed.
+- [x] Context Policy codec/default/projection/packing tests pass.
+- [x] Session/exclusion/Return Instruction tests pass.
+- [x] Patch parser/sniffer/function/file/native-diff/application/Undo tests pass.
+- [x] `buildPlugin` creates the installable ZIP and archive inspection passes.
+- [x] Plugin Verifier passes every configured PyCharm target, including 2026.2.0.1.
+- [ ] CI performs equivalent gates and uploads the same plugin artifact shape.
 
-## Main outbound workflow
+## Outbound acceptance
 
-- [x] A single Project View file exposes all Copilot context actions.
-- [x] Ctrl/Shift multiselect preserves every selected file.
-- [x] Files from different folders remain pinned together.
-- [x] The main workflow presents Files -> Prompt skill -> Prepare for Copilot in order.
-- [x] The capacity rail includes `00_REPO_CONTEXT.md` and never exceeds the configured limit.
-- [x] Prepare batch creates safe copies and does not change repository files.
-- [x] Drag transfer and clipboard file transfer expose a real Java file list.
-- [x] Complete-pack text contains metadata, original paths, hashes and exact text content.
-- [x] Copy context-only and return instructions remain available under More -> Context preview without cluttering the main flow.
-- [x] Their generated instruction sources are adjustable through Settings, guidelines and prompt skills.
-- [x] Prepared files move to history and the next batch avoids earlier files by default.
+- [ ] Single and Ctrl/Shift multi-file Project View actions work from multiple folders.
+- [ ] Pinned files remain until explicit removal; deleted/moved paths show warnings.
+- [ ] Every Prompt Library entry owns editable prompt, guidelines, Context Policy and Return Instructions.
+- [ ] Policy resolvers, priorities, depth/file limits, targets, return modes and previous-batch modes behave independently.
+- [ ] Included, omitted and excluded candidates show path, evidence and reason.
+- [ ] Batch/session/permanent exclusions and Include once have exact scope.
+- [ ] Repository-file allocation and physical attachment packing are distinct.
+- [ ] Every valid prepared pack has one `00_REPO_CONTEXT.md` and at most 20 physical attachments.
+- [ ] Pinned files stay separate and automatic bundles map every original repository-relative path.
+- [ ] Secret/ignored/unsafe content cannot enter an automatic pack.
+- [ ] Preview, copy context, copy Return Instructions, copy files, copy text, drag and open-folder fallback all match the same attachment plan.
+- [ ] Batch history, Next batch, Restore, Forget and New session behave consistently.
+- [ ] More page controls keep a stable position/order during navigation and refresh.
 
-## Inbound workflow
+## Inbound acceptance
 
-- [x] `.copilotpatch`, matching JSON and ZIP imports validate paths and schema.
-- [x] Replace and add-function operations work across one or multiple Python files.
-- [x] Decorators, async functions, methods and nested functions retain correct identity.
-- [x] Hash conflicts require explicit force; safe changes remain individually selectable.
-- [x] Applying selected replacements is one undoable write command and preserves unrelated code.
+- [ ] `.copilotpatch`, schema-matching JSON and safe ZIP imports work; ordinary JSON is rejected.
+- [ ] Repository/session/path/symlink/schema/size/hash checks fail closed.
+- [ ] Function replace/add supports top-level, method, async, decorated and unambiguous nested targets.
+- [ ] `add_file` creates only a new syntactically valid Python file in an existing project directory.
+- [ ] `delete_file` requires an existing Python file and exported content hash.
+- [ ] Native per-operation, combined and three-way conflict diffs show correct content/identity.
+- [ ] Selection, Keep current, Use Copilot and Force Replace require explicit choices.
+- [ ] Apply revalidates immediately before write, changes only selected operations, preserves unrelated code/encoding and supports Undo.
+- [ ] Post-apply report distinguishes passed, failed and not-run validation.
 
-## Security and resilience
+## Installation and live evidence
 
-- [x] Traversal, absolute paths and repository escapes are rejected.
-- [x] Likely secret files require explicit confirmation and contents never enter logs.
-- [x] Ignored/generated paths and oversized scan candidates behave as documented.
-- [x] Session cleanup respects retention and keep markers.
+- [ ] `install.ps1 -BuildOnly` succeeds from a clean clone/equivalent isolated copy.
+- [x] Actual `install.ps1` update works with PyCharm closed and keeps its previous version outside the IDE plugin directory.
+- [ ] Manual ZIP installation fallback works.
+- [x] Plugin loads exactly once in PyCharm 2026.2.0.1 according to the current IDE log and installed-directory audit.
+- [ ] Every row in [live-pycharm-test-matrix.md](live-pycharm-test-matrix.md) is `PASS` or justified `NOT_APPLICABLE`.
+- [ ] Every live row has the required reviewed full-window screenshot and supplemental assertion where needed.
+- [ ] Microsoft 365 Copilot accepts the prepared attachment list in the tested environment without an automatic chat send.
+- [ ] Direct-drag outcome is documented honestly and staging-folder fallback works.
 
-## Live IDE checks
+## Final delivery
 
-- [x] Plugin loads in PyCharm 2026.2.0.1.
-- [x] Tool window remains usable at roughly one-third screen width.
-- [x] Single-file and multi-file context menus work in the real Project View.
-- [x] Batch, Import, More and Prompt Skills render without clipping; Import has a resizable 50/50 list/diff split.
-- [x] A real batch stages `00_REPO_CONTEXT.md`, copies it as a Windows file list and opens the staging folder in Explorer.
-- [x] Pasted patch JSON validates in a background task without blocking or touching the EDT.
-- [x] A safe Python replacement applies in PyCharm 2026.2.0.1, preserves its neighbouring function and saves correctly.
-- [x] One PyCharm Undo action restores the complete original function.
-- [x] Microsoft 365 Copilot accepts the staged context file through the real clipboard file-list flavor; the test draft was not sent.
-- [x] Direct Swing/browser drag remains documented as platform-dependent, with clipboard and staging-folder fallbacks.
+- [x] Exact commands, versions, test totals, verifier result, ZIP path/hash and known limitations are recorded in [release-evidence-2026-08-08.md](release-evidence-2026-08-08.md).
+- [ ] Git diff/status are reviewed; no required TODO or generated junk remains.
+- [ ] Required files are committed and `main` is pushed successfully.

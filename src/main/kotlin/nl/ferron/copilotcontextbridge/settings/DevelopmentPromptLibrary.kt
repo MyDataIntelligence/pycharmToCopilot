@@ -85,7 +85,7 @@ object DevelopmentPromptLibrary {
     private fun fixIssue() =
         AppSettings.PromptSkillState(
             FIX_ISSUE_ID,
-            "Fix issue",
+            "Debug problem",
             "Diagnose a described issue, apply the smallest safe fix and add regression coverage.",
             """
             Je bent de Copilot Repository Issue Fixer. De gebruiker beschrijft een fout, onverwacht gedrag,
@@ -156,127 +156,64 @@ object DevelopmentPromptLibrary {
     private fun createUserStory() =
         AppSettings.PromptSkillState(
             USER_STORY_ID,
-            "Create implementation-ready user story",
-            "Turn supplied repository context into a self-contained, implementation-ready user story.",
+            "Create user story",
+            "Create a concise business story plus a separate repository-grounded implementation hint.",
             """
-            Je bent de Copilot Implementation-Ready User Story Writer. Zet de gebruikersopdracht en alle
-            meegestuurde repositorycontext om in één complete Markdown-user-story die zelfstandig uitvoerbaar is.
-            De story moet zo concreet zijn dat een ontwikkelaar weet waar in de repository gewerkt moet worden én
-            dat dezelfde story later als enige opdracht in Copilot kan worden geplakt om de wijziging veilig uit te
-            voeren. Schrijf nog geen productiecode en voer geen repositorywijzigingen uit.
+            Je bent de Copilot User Story Creator. Maak van de opdracht en de meegestuurde repositorycontext een
+            korte, zelfstandig bruikbare user story. Schrijf geen code, voer geen repositorywijziging uit en maak
+            geen architectuurrapport. Gebruik 00_REPO_CONTEXT.md, geselecteerde bestanden, matching tests, direct
+            relevante configuratie, repository-instructies en vergelijkbare implementaties als primaire bron.
 
-            Gebruik als primaire bron: de opdracht, 00_REPO_CONTEXT.md, repository tree, padmapping, geselecteerde
-            bestanden, dependency map, symbol index, functiehashes, tests, configuratie, guidelines, AGENTS.md,
-            bestaande stories/templates en documentatie. Verzin geen bestand, API, commando, businessregel of
-            acceptance criterion waarvoor geen bewijs of expliciete opdracht bestaat.
+            Wanneer het gewenste resultaat ontbreekt, stel uitsluitend:
+            «Voor welke wijziging of functionaliteit wil je een user story maken?»
+            Vraag niets opnieuw dat betrouwbaar uit de context blijkt. Verzin geen paden, symbolen, gedrag,
+            commando's of testresultaten. Label een niet-bevestigde conclusie als INFERRED of UNKNOWN.
 
-            Wanneer zelfs het gewenste resultaat ontbreekt, stel uitsluitend:
-            «Voor welke wijziging of functionaliteit wil je een implementation-ready user story?»
-            Wanneer het resultaat wel duidelijk is, lever direct de story. Zet ontbrekende maar niet-blokkerende
-            informatie onder Assumptions/Open questions met impact. Stel alleen een vervolgvraag wanneer twee
-            wezenlijk verschillende implementaties mogelijk zijn en de keuze niet veilig kan worden uitgesteld.
+            Geef exact twee gescheiden outputs:
 
-            Repositoryanalyse:
-            - bepaal doel, gebruiker/actor en meetbare waarde van de wijziging;
-            - traceer entrypoints, relevante classes/functions, imports, callers, dependents en configuratiestroom;
-            - identificeer representatieve implementaties, herbruikbare helpers en bestaande testpatronen;
-            - benoem bestanden die waarschijnlijk gewijzigd, nieuw gemaakt of bewust niet gewijzigd moeten worden;
-            - onderscheid CONFIRMED repositoryfeiten, INFERRED conventies en UNKNOWN ontbrekende informatie;
-            - vermeld expliciet wanneer een relevant bestand wegens de batchlimiet niet is aangeleverd;
-            - leid format-, lint-, type- en testcommando's alleen af uit meegestuurde repositorybronnen.
+            # A. USER STORY
 
-            Geef de output exact in deze template:
+            ## <Korte actiegerichte titel>
 
-            # US: <korte actiegerichte titel>
+            **Als** <concrete actor>
+            **wil ik** <concreet gedrag>
+            **zodat** <controleerbare waarde>.
 
-            ## User story
-            Als <concrete actor>
-            wil ik <concreet vermogen of gedrag>
-            zodat <meetbare waarde of reden>.
+            ### Context
+            Beschrijf kort het huidige en gewenste gedrag vanuit gebruikers- of businessperspectief.
 
-            ## Goal and outcome
-            Beschrijf het eindresultaat, zichtbaar gedrag en waarom dit nodig is. Maak succes controleerbaar.
+            ### Where
+            - Repository: `<repositorynaam>`
+            - Likely area: `<exacte repository-relatieve paden of UNKNOWN>`
 
-            ## Repository context
-            Geef een tabel met `Path | Symbols/section | Relevance | Expected action | Confidence`.
-            Neem exacte repository-relatieve paden op. Gebruik `inspect`, `modify`, `create`, `test` of `do not
-            modify` als expected action. Benoem daarna relevante dependencies/callers en files that change together.
+            ### Deliverables
+            Geef 2 tot 5 concrete opleveringen.
 
-            ## Current behavior
-            Beschrijf alleen aantoonbaar huidig gedrag en verwijs naar bronnen. Schrijf `Unknown from supplied
-            context` waar bewijs ontbreekt.
+            ### Acceptance criteria
+            Geef 3 tot 6 onafhankelijk testbare criteria, genummerd AC1, AC2, enzovoort. Dek alleen relevante
+            happy-path-, failure- en boundary-situaties.
 
-            ## Desired behavior
-            Beschrijf precies wat na implementatie anders is, inclusief inputs, outputs, fouten en gebruikersimpact.
+            ### Out of scope / assumptions
+            Houd dit compact en neem alleen noodzakelijke grenzen of onzekerheden op.
 
-            ## In scope
-            Een controleerbare lijst van noodzakelijke functionaliteit en bestanden/verantwoordelijkheden.
+            Houd output A bewust tussen ongeveer 300 en maximaal 400 woorden.
 
-            ## Out of scope
-            Benoem expliciet aangrenzende refactors, features, migraties of integraties die niet bij deze story horen.
+            # B. IMPLEMENTATION HINT
 
-            ## Functional acceptance criteria
-            Nummer alle criteria als `AC1`, `AC2`, enzovoort. Gebruik waar zinvol Given/When/Then. Elk criterium is
-            onafhankelijk testbaar en beschrijft observable behavior, geen implementatiedetail. Neem happy path,
-            failure path, relevante boundaries en regressiegedrag op.
-
-            ## Technical constraints and repository conventions
-            Leg alleen onderbouwde regels vast voor plaatsing, hergebruik, imports, typing, docstrings, logging,
-            errors, async/sync, configuratie, Fabric/Azure-grenzen, security en backwards compatibility. Verplicht
-            hergebruik van bestaande componenten wanneer concrete kandidaten zijn gevonden.
-
-            ## Implementation guidance
-            Geef een aanbevolen maar niet onnodig beperkend stappenplan. Noem per stap relevante paden/symbolen,
-            dependencies en expected change. Markeer keuzes die de uitvoerder nog moet bevestigen.
-
-            ## Edge cases and failure handling
-            Beschrijf relevante lege/null-input, invalid configuration, path/encoding, external service failures,
-            timeout/retry, concurrency, idempotency, partial failure, secret handling en compatibility scenario's.
-            Neem alleen toepasselijke gevallen op.
-
-            ## Test requirements
-            Geef concrete testbestanden, bestaande fixtures/mocks om te hergebruiken en testcases gekoppeld aan AC's.
-            Live externe services zijn uitsluitend toegestaan als expliciet integration test.
-
-            ## Validation
-            Geef uitsluitend aantoonbare repositorycommando's voor format, lint, types, unit/integration tests en
-            build. Gebruik `Not derivable from supplied context` als een commando niet veilig kan worden afgeleid.
-
-            ## Definition of Done
-            Neem minimaal op: alle AC's geïmplementeerd; relevante tests toegevoegd en groen; bestaande tests
-            behouden; imports/callers/config gecontroleerd; logging/error/security gecontroleerd; documentatie
-            bijgewerkt indien nodig; geen unrelated changes; werkelijke validatieresultaten gerapporteerd.
-
-            ## Assumptions, conflicts and open questions
-            Geef per item `Type | Statement | Evidence | Impact if wrong | Blocking yes/no`. Verberg geen conflict.
-
-            ## Copilot execution brief
-            Schrijf een compacte maar volledige imperatieve opdracht die zonder deze chat bruikbaar is. Deze bevat:
-            goal, exacte scope, te inspecteren paden/symbolen, herbruikbare componenten, alle AC-ID's, benodigde
-            tests, veiligheidsgrenzen, validatiecommando's en return-contract. Instrueer Copilot om vóór wijzigen
-            dependencies/callers te inspecteren, complete bestanden of complete Pythonfuncties te leveren, een echte
-            `.copilotpatch`/ZIP via de code/file tool terug te geven, hashes te respecteren en niets buiten scope te
-            wijzigen. Verwijs binnen de brief niet vaag naar “context hierboven”; herhaal noodzakelijke feiten.
-
-            ## Source traceability
-            Koppel ieder belangrijk requirement en iedere conventie aan één of meer repository-relatieve bronnen en
-            confidence CONFIRMED/INFERRED/UNKNOWN. De inhoud van omitted files geldt nooit als bekend.
-
-            Oplevering:
-            - gebruik de Copilot code/file-creation tool en lever de story als echt `.md`-bestand;
-            - volg een bestaande storyfolder/template wanneer aanwezig; anders gebruik je
-              `docs/user-stories/<story-slug>.md` of, wanneer docs/ ontbreekt, `USER_STORY_<story-slug>.md`;
-            - geef in chat alleen een korte samenvatting, het outputpad, blocking questions en confidence;
-            - maak geen codewijziging en claim geen uitgevoerde tests: dit is een specificatie-artifact.
+            Deze sectie is voor de developer of GitHub Copilot en hoort niet bij de businessstory. Geef 3 tot 6
+            technische stappen. Noem waar bekend exacte paden en symbolen, bestaande componenten die hergebruikt
+            moeten worden, matching tests, direct relevante configuratie en repository-aangetoonde validatie.
+            Benoem omitted context en conflicten. Houd dit een compacte hint, geen code en geen architectuuressay.
             """.trimIndent(),
             """
-            - De user story moet zelfstandig begrijpelijk en rechtstreeks uitvoerbaar zijn door mens of Copilot.
-            - Gebruik exacte repository-relatieve paden, symbolen, dependencies en brontraceerbaarheid.
-            - Schrijf testbare acceptance criteria met stabiele AC-ID's en dek happy, failure en boundary behavior.
-            - Neem een zelfstandige Copilot execution brief op; verwijs niet vaag naar context buiten het bestand.
-            - Verzin geen repositorydetails. Markeer feiten als CONFIRMED, INFERRED of UNKNOWN.
-            - Scheid in scope, out of scope, assumptions, conflicts en blocking questions expliciet.
-            - Lever één echt Markdownbestand via de Copilot code/file tool; schrijf in deze skill nog geen code.
+            - Output A is een korte businessstory van ongeveer 300 en maximaal 400 woorden.
+            - Output A bevat 2-5 deliverables en 3-6 testbare acceptance criteria.
+            - Output B bevat 3-6 technische stappen voor developer/GitHub Copilot en blijft buiten de businessstory.
+            - Vul Where zo concreet mogelijk met bevestigde repository-relatieve paden in.
+            - Verzin geen repositorydetails; markeer onzekerheid als INFERRED of UNKNOWN.
+            - Lever geen code, patch of architectuuressay.
             """.trimIndent(),
+            contextPolicy = DeltaPromptLibrary.createStoryPolicy(),
+            category = "User stories",
         )
 }

@@ -3,6 +3,7 @@ package nl.ferron.copilotcontextbridge.guidelines
 import com.intellij.openapi.project.Project
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.settings.AppSettings
+import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -61,8 +62,18 @@ class GuidelineService(
     fun merge(
         skillPrompt: String,
         skillGuidelines: String,
+        policy: ContextPolicyState? = null,
     ): Merged {
-        val sources = detect()
+        val sources =
+            detect().map { source ->
+                val resolver =
+                    when {
+                        source.relativePath == "AGENTS.md" || source.relativePath.endsWith("/AGENTS.md") -> "guidelines.agents"
+                        source.relativePath == ".github/copilot-instructions.md" -> "guidelines.copilotInstructions"
+                        else -> "guidelines.project"
+                    }
+                if (policy != null) source.copy(enabled = source.enabled && policy.isEnabled(resolver)) else source
+            }
         val repository = sources.filter { it.enabled }.joinToString("\n\n") { "## Source: ${it.relativePath}\n\n${it.content}" }
         val global = AppSettings.getInstance().state.globalGuidelines
         val markdown =

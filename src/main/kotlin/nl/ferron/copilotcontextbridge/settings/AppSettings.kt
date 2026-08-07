@@ -14,18 +14,34 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
 
         @JvmField var description: String = ""
 
+        @JvmField var category: String = "Code"
+
         @JvmField var prompt: String = ""
 
         @JvmField var guidelines: String = ""
 
+        @JvmField var returnInstructionsAddition: String = ""
+
+        @JvmField var contextPolicy: ContextPolicyState = ContextPolicyState.defaultFor("general-change")
+
         constructor()
 
-        constructor(id: String, name: String, description: String, prompt: String, guidelines: String = "") {
+        constructor(
+            id: String,
+            name: String,
+            description: String,
+            prompt: String,
+            guidelines: String = "",
+            contextPolicy: ContextPolicyState = ContextPolicyState.defaultFor(id),
+            category: String = "Code",
+        ) {
             this.id = id
             this.name = name
             this.description = description
             this.prompt = prompt
             this.guidelines = guidelines
+            this.contextPolicy = contextPolicy
+            this.category = category
         }
     }
 
@@ -42,6 +58,8 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
 
         @JvmField var returnFileInstruction: String = Defaults.RETURN_FILE_INSTRUCTION
 
+        @JvmField var returnInstructionsByMode: MutableMap<String, String> = ReturnInstructionDefaults.all().toMutableMap()
+
         @JvmField var combinedTextIntro: String = Defaults.COMBINED_TEXT_INTRO
 
         @JvmField var promptSkills: MutableList<PromptSkillState> = defaultPromptSkills().toMutableList()
@@ -53,25 +71,41 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
 
     override fun loadState(state: Data) {
         data = state
-        if (data.promptSkills.isEmpty()) data.promptSkills.addAll(defaultPromptSkills())
-        DevelopmentPromptLibrary.skills().forEach { builtIn ->
+        val builtIns = defaultPromptSkills()
+        builtIns.forEach { builtIn ->
             if (data.promptSkills.none { it.id == builtIn.id }) data.promptSkills.add(builtIn)
         }
-        val prioritizedDevelopmentSkills =
-            DevelopmentPromptLibrary.skills().mapNotNull { builtIn -> data.promptSkills.firstOrNull { it.id == builtIn.id } }
-        data.promptSkills.removeAll { candidate -> prioritizedDevelopmentSkills.any { it.id == candidate.id } }
-        data.promptSkills.addAll(minOf(1, data.promptSkills.size), prioritizedDevelopmentSkills)
-        val review = data.promptSkills.firstOrNull { it.id == RepositoryReviewPrompt.ID } ?: RepositoryReviewPrompt.skill()
-        data.promptSkills.removeAll { it.id == RepositoryReviewPrompt.ID }
-        data.promptSkills.add(minOf(1 + prioritizedDevelopmentSkills.size, data.promptSkills.size), review)
+        val builtInById = builtIns.associateBy { it.id }
+        data.promptSkills.forEach { skill ->
+            if (skill.contextPolicy.id.isBlank() || (skill.contextPolicy.id == "general-change-policy" && skill.id != "general-change")) {
+                skill.contextPolicy = builtInById[skill.id]?.contextPolicy?.copyOf() ?: ContextPolicyState.defaultFor(skill.id)
+            }
+            if (skill.contextPolicy.rules.isEmpty()) skill.contextPolicy.rules = ContextPolicyState.defaultRules().toMutableList()
+            val expectedCategory = builtInById[skill.id]?.category
+            if (skill.category.isBlank() || (skill.category == "Code" && expectedCategory != null && expectedCategory != "Code")) {
+                skill.category = expectedCategory ?: "Code"
+            }
+        }
+        ReturnInstructionDefaults.all().forEach { (mode, defaultText) -> data.returnInstructionsByMode.putIfAbsent(mode, defaultText) }
+        if (
+            data.returnFileInstruction.isNotBlank() &&
+            data.returnFileInstruction != Defaults.RETURN_FILE_INSTRUCTION &&
+            data.returnInstructionsByMode[CopilotReturnMode.COPILOT_PATCH_FILE.name] ==
+            ReturnInstructionDefaults.forMode(
+                CopilotReturnMode.COPILOT_PATCH_FILE,
+            )
+        ) {
+            data.returnInstructionsByMode[CopilotReturnMode.COPILOT_PATCH_FILE.name] = data.returnFileInstruction
+        }
+        data.promptSkills.firstOrNull { it.id == DevelopmentPromptLibrary.FIX_ISSUE_ID && it.name == "Fix issue" }?.name =
+            "Debug problem"
+        data.promptSkills.firstOrNull { it.id == "write-tests" && it.name == "Write tests" }?.name = "Generate tests"
+        data.promptSkills.firstOrNull { it.id == RepositoryReviewPrompt.ID && it.name == "Review selected code" }?.name =
+            "Review code"
         RepositoryReviewPrompt.upgradeLegacy(data.promptSkills)
-        val refactor = data.promptSkills.firstOrNull { it.id == RefactorPrompt.ID } ?: RefactorPrompt.skill()
-        data.promptSkills.removeAll { it.id == RefactorPrompt.ID }
-        val reviewIndex = data.promptSkills.indexOfFirst { it.id == RepositoryReviewPrompt.ID }
-        data.promptSkills.add(if (reviewIndex >= 0) reviewIndex + 1 else minOf(5, data.promptSkills.size), refactor)
-        CreatorPromptLibrary.skills().forEach { builtIn ->
-            if (data.promptSkills.none { it.id == builtIn.id }) data.promptSkills.add(builtIn)
-        }
+        val orderedBuiltIns = builtIns.mapNotNull { builtIn -> data.promptSkills.firstOrNull { it.id == builtIn.id } }
+        val customSkills = data.promptSkills.filter { it.id !in builtInById }
+        data.promptSkills = (orderedBuiltIns + customSkills).toMutableList()
         if (data.returnFileInstruction.isBlank()) data.returnFileInstruction = Defaults.RETURN_FILE_INSTRUCTION
         if (data.combinedTextIntro.isBlank()) data.combinedTextIntro = Defaults.COMBINED_TEXT_INTRO
         if (data.ignorePatterns.isEmpty()) data.ignorePatterns.addAll(Defaults.ignorePatterns)
@@ -89,19 +123,32 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
         fun getInstance(): AppSettings = ApplicationManager.getApplication().getService(AppSettings::class.java)
 
         fun defaultPromptSkills(): List<PromptSkillState> =
-            listOf(
-                PromptSkillState(
-                    "general-change",
-                    "General change",
-                    "Make a focused code change after clarifying the goal.",
-                    "After the user explains the goal, make the smallest safe change and return only modified functions in the required patch format.",
-                    "Preserve unrelated behavior and follow repository conventions. Validate callers, tests and configuration before changing public behavior.",
-                ),
-            ) +
-                DevelopmentPromptLibrary.skills() +
-                listOf(
-                    RepositoryReviewPrompt.skill(),
-                    RefactorPrompt.skill(),
+            buildList {
+                add(
+                    PromptSkillState(
+                        "general-change",
+                        "General change",
+                        "Make a focused code change after clarifying the goal.",
+                        "After the user explains the goal, make the smallest safe change and return only modified functions in the required patch format.",
+                        "Preserve unrelated behavior and follow repository conventions. Validate callers, tests and configuration before changing public behavior.",
+                    ),
+                )
+                add(DevelopmentPromptLibrary.skills().first { it.id == DevelopmentPromptLibrary.FIX_ISSUE_ID })
+                add(
+                    PromptSkillState(
+                        "write-tests",
+                        "Generate tests",
+                        "Add focused regression coverage.",
+                        "After clarification, design and implement focused tests for the requested behavior. Reuse existing test conventions and mock external boundaries.",
+                        "Cover happy path, failure path, boundary cases and regressions without depending on live external services.",
+                    ),
+                )
+                add(RepositoryReviewPrompt.skill())
+
+                // Existing secondary Code workflows remain available after the four primary entries.
+                add(RefactorPrompt.skill())
+                add(DevelopmentPromptLibrary.skills().first { it.id == DevelopmentPromptLibrary.NEW_CODE_ID })
+                add(
                     PromptSkillState(
                         "create-documentation",
                         "Create documentation",
@@ -109,13 +156,8 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
                         "After the user explains the intended audience and documentation goal, create accurate documentation grounded only in supplied files. Clearly mark information that requires an omitted file. Return function patches only when Python functions were actually changed; otherwise return the requested Markdown content with repository-relative destination paths.",
                         "Use clear headings, concrete examples and repository-relative links. Do not document behavior that cannot be confirmed from supplied files. Preserve the repository's terminology and documentation style.",
                     ),
-                    PromptSkillState(
-                        "write-tests",
-                        "Write tests",
-                        "Add focused regression coverage.",
-                        "After clarification, design and implement focused tests for the requested behavior. Reuse existing test conventions and mock external boundaries.",
-                        "Cover happy path, failure path, boundary cases and regressions without depending on live external services.",
-                    ),
+                )
+                add(
                     PromptSkillState(
                         "explain-architecture",
                         "Explain architecture",
@@ -123,6 +165,12 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
                         "After clarification, explain the architecture, ownership boundaries and data flow using only supplied content. Distinguish confirmed facts from inferences.",
                         "Prefer concise diagrams and repository-relative references. Explicitly identify omitted dependencies that limit certainty.",
                     ),
-                ) + CreatorPromptLibrary.skills()
+                )
+
+                add(DeltaPromptLibrary.skills().first { it.id == DeltaPromptLibrary.PREPARE_PR_ID })
+                add(DeltaPromptLibrary.skills().first { it.id == DeltaPromptLibrary.ANALYZE_STORY_ID })
+                add(DevelopmentPromptLibrary.skills().first { it.id == DevelopmentPromptLibrary.USER_STORY_ID })
+                addAll(CreatorPromptLibrary.skills())
+            }
     }
 }

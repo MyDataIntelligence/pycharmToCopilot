@@ -9,6 +9,7 @@ import nl.ferron.copilotcontextbridge.model.RankedSelection
 import nl.ferron.copilotcontextbridge.model.RelationConfidence
 import nl.ferron.copilotcontextbridge.model.RelationType
 import nl.ferron.copilotcontextbridge.settings.AppSettings
+import nl.ferron.copilotcontextbridge.settings.CopilotReturnMode
 import java.nio.file.Path
 
 class ContextMarkdownRendererTest : BasePlatformTestCase() {
@@ -43,6 +44,7 @@ class ContextMarkdownRendererTest : BasePlatformTestCase() {
                     listOf("AGENTS.md"),
                     "Fix issue",
                     "Fix the described problem.",
+                    3,
                     listOf(BatchSummary("session-1", "2026-08-07T01:00:00Z", "Review", listOf("src/old.py"), "HANDED_OFF")),
                     true,
                 ),
@@ -51,7 +53,7 @@ class ContextMarkdownRendererTest : BasePlatformTestCase() {
         assertTrue(markdown.contains("Welke wijziging wil je uitvoeren?"))
         assertTrue(markdown.contains("another 20 files, or more batches"))
         assertTrue(markdown.contains("session-1"))
-        assertTrue(markdown.contains("`src__main.py` | `src/main.py`"))
+        assertTrue(markdown.contains("`src__main.py` | `fixture-repository` | `src/main.py`"))
         assertTrue(markdown.contains("src/main.py` → `src/helper.py"))
         assertTrue(markdown.contains("`run` — function — `sha256:abc`"))
         assertTrue(markdown.contains("tests/test_main.py"))
@@ -79,6 +81,7 @@ class ContextMarkdownRendererTest : BasePlatformTestCase() {
                     emptyList(),
                     "General",
                     "Prompt",
+                    2,
                     emptyList(),
                     false,
                     "C:\\explicit\\repo",
@@ -87,6 +90,38 @@ class ContextMarkdownRendererTest : BasePlatformTestCase() {
 
         assertTrue(markdown.contains("Explicitly included local path: `C:\\explicit\\repo`"))
         assertFalse(markdown.contains("```mermaid"))
+    }
+
+    fun testTextOnlyReturnModeDoesNotEmitPatchSchemaOrPatchOperations() {
+        val selection = RankedSelection(listOf(candidate("README.md", true, 1000, emptyList())), emptyList(), emptyList(), emptyList())
+
+        val markdown =
+            ContextMarkdownRenderer.render(
+                ContextMarkdownRenderer.Input(
+                    "repo",
+                    "session",
+                    selection,
+                    "repo/",
+                    emptyList(),
+                    emptyMap(),
+                    mapOf("README.md" to "README.md"),
+                    "guidelines",
+                    emptyList(),
+                    "Create user story",
+                    "Create a user story.",
+                    2,
+                    emptyList(),
+                    false,
+                    returnMode = CopilotReturnMode.TEXT_ONLY,
+                    returnInstructions = "Return the user story as structured text.",
+                ),
+            )
+
+        assertTrue(markdown.contains("## WHEN RETURNING THE RESULT"))
+        assertTrue(markdown.contains("Return the user story as structured text."))
+        assertFalse(markdown.contains("\"formatVersion\""))
+        assertFalse(markdown.contains("add_function"))
+        assertFalse(markdown.contains(".copilotpatch)"))
     }
 
     private fun candidate(

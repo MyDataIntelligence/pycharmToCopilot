@@ -36,6 +36,8 @@ data class FunctionReplacement(
     val insertAfterQualifiedName: String? = null,
 )
 
+const val FILE_OPERATION_QUALIFIED_NAME = "<file>"
+
 enum class ReplacementStatus { MATCH, NEW, CHANGED, MISSING, AMBIGUOUS, INVALID }
 
 data class ValidatedReplacement(
@@ -47,6 +49,7 @@ data class ValidatedReplacement(
     val oldLineCount: Int = 0,
     val newLineCount: Int = 0,
     val unifiedDiff: String = "",
+    val baseText: String = "",
     val selected: Boolean = status == ReplacementStatus.MATCH || status == ReplacementStatus.NEW,
 )
 

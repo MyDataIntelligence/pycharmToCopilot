@@ -1,14 +1,22 @@
 package nl.ferron.copilotcontextbridge.staging
 
 import com.google.gson.GsonBuilder
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.psi.PsiManager
+import com.jetbrains.python.psi.PyFile
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.analysis.FunctionHasher
 import nl.ferron.copilotcontextbridge.context.ContextPackService
+import nl.ferron.copilotcontextbridge.model.AttachmentKind
 import nl.ferron.copilotcontextbridge.model.ContextPack
+import nl.ferron.copilotcontextbridge.model.PlannedAttachment
 import nl.ferron.copilotcontextbridge.model.StagedFile
+import nl.ferron.copilotcontextbridge.model.displayRepository
+import nl.ferron.copilotcontextbridge.model.sourceKey
+import nl.ferron.copilotcontextbridge.patch.PythonFunctionLocator
 import nl.ferron.copilotcontextbridge.security.PathSafety
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
@@ -51,28 +59,31 @@ class StagingService(
                     false,
                 ),
             )
-        val names = StagedFilenameService.namesFor(pack.selection.included.map { it.relativePath })
-        pack.selection.included.forEach { candidate ->
-            val source = PathSafety.resolveInside(projectRoot, candidate.relativePath)
-            val target = directory.resolve(names.getValue(candidate.relativePath))
-            val vf = LocalFileSystem.getInstance().findFileByNioFile(source)
-            val document = vf?.let { FileDocumentManager.getInstance().getCachedDocument(it) }
-            if (document != null && FileDocumentManager.getInstance().isDocumentUnsaved(document)) {
-                Files.writeString(target, document.text, vf.charset)
-            } else {
-                Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES)
+        pack.attachmentPlan.attachments.forEach { attachment ->
+            val target = directory.resolve(attachment.stagedName)
+            when (attachment.kind) {
+                AttachmentKind.PINNED_ORIGINAL -> writePinnedAttachment(projectRoot, attachment, target)
+                AttachmentKind.AUTOMATIC_BUNDLE -> writeAutomaticBundle(projectRoot, pack.repositoryId, attachment, target)
+                AttachmentKind.GENERATED_CONTEXT -> Files.writeString(target, attachment.generatedContent, StandardCharsets.UTF_8)
             }
             staged +=
                 StagedFile(
-                    candidate.relativePath,
-                    target.fileName.toString(),
+                    if (attachment.kind == AttachmentKind.PINNED_ORIGINAL) {
+                        attachment.candidates.single().relativePath
+                    } else {
+                        "generated:${attachment.stagedName}"
+                    },
+                    attachment.stagedName,
                     target,
                     sha256(target),
-                    candidate.relations.joinToString(",") { it.type.name }.ifBlank { "manual" },
-                    candidate.pinned,
+                    attachment.candidates.joinToString(", ") { candidateReason(it) },
+                    attachment.candidates.singleOrNull()?.pinned == true,
                 )
         }
         val service = project.getService(ContextPackService::class.java)
+        val baseFunctions = captureBaseFunctions(pack)
+        val baseFunctionsFile = metadata.resolve("base-functions.json")
+        Files.writeString(baseFunctionsFile, GsonBuilder().setPrettyPrinting().create().toJson(baseFunctions), StandardCharsets.UTF_8)
         val manifestData =
             linkedMapOf<String, Any>(
                 "formatVersion" to 1,
@@ -82,7 +93,10 @@ class StagingService(
                 "repositoryRoot" to projectRoot.toString(),
                 "createdAt" to Instant.now().toString(),
                 "pluginVersion" to "1.0.0",
+                "baseFunctionsFile" to ".session/base-functions.json",
                 "promptSkillId" to pack.promptSkillId,
+                "physicalAttachmentCount" to staged.size,
+                "repositoryFileCount" to pack.attachmentPlan.repositoryFileCount,
                 "files" to
                     staged.map {
                         mapOf(
@@ -105,6 +119,18 @@ class StagingService(
                     },
                 "relations" to pack.relations,
                 "guidelineSources" to pack.guidelineSources,
+                "repositoryFiles" to
+                    pack.selection.included.map { candidate ->
+                        mapOf(
+                            "path" to candidate.relativePath,
+                            "repositoryId" to candidate.repositoryId.ifBlank { pack.repositoryId },
+                            "repositoryName" to candidate.displayRepository,
+                            "preparedAttachment" to pack.attachmentPlan.repositoryToAttachment[candidate.sourceKey],
+                            "sha256" to currentSourceHash(resolveCandidateSource(projectRoot, candidate)),
+                            "reason" to candidateReason(candidate),
+                            "pinned" to candidate.pinned,
+                        )
+                    },
             )
         val manifest = metadata.resolve("context-session.json")
         Files.writeString(manifest, GsonBuilder().setPrettyPrinting().create().toJson(manifestData), StandardCharsets.UTF_8)
@@ -141,10 +167,161 @@ class StagingService(
         SessionCleanupService.cleanup(root, cutoff)
     }
 
+    private fun captureBaseFunctions(pack: ContextPack): List<Map<String, String>> =
+        ReadAction
+            .nonBlocking<List<Map<String, String>>> {
+                val root = ProjectRoot.virtualFile(project)
+                val psiManager = PsiManager.getInstance(project)
+                pack.symbols.flatMap { (path, symbols) ->
+                    val virtualFile = root.findFileByRelativePath(path) ?: return@flatMap emptyList()
+                    val pyFile = psiManager.findFile(virtualFile) as? PyFile ?: return@flatMap emptyList()
+                    symbols.mapNotNull { symbol ->
+                        val exportedHash = symbol.hash ?: return@mapNotNull null
+                        val function = PythonFunctionLocator.find(pyFile, symbol.qualifiedName).singleOrNull() ?: return@mapNotNull null
+                        val currentHash = FunctionHasher.hash(function.text)
+                        require(currentHash == exportedHash) {
+                            "Cannot stage stale context: $path::${symbol.qualifiedName} changed after context generation. Recalculate first."
+                        }
+                        mapOf(
+                            "path" to path,
+                            "qualifiedName" to symbol.qualifiedName,
+                            "hash" to currentHash,
+                            "text" to function.text,
+                        )
+                    }
+                }
+            }.executeSynchronously()
+
+    private fun writePinnedAttachment(
+        projectRoot: Path,
+        attachment: PlannedAttachment,
+        target: Path,
+    ) {
+        val candidate = attachment.candidates.single()
+        val source = resolveCandidateSource(projectRoot, candidate)
+        if (attachment.convertedTextCopy) {
+            val originalText = readCurrentText(source)
+            val converted =
+                buildString {
+                    appendLine("COPILOT CONTEXT BRIDGE TEXT COPY")
+                    appendLine()
+                    appendLine("Original path: ${candidate.relativePath}")
+                    appendLine("Repository: ${candidate.displayRepository}")
+                    appendLine("Repository ID: ${candidate.repositoryId.ifBlank { "current" }}")
+                    appendLine("Original extension: .${candidate.relativePath.substringAfterLast('.', "")}")
+                    appendLine("Original SHA-256: ${currentSourceHash(source)}")
+                    appendLine("The repository source was not renamed or modified.")
+                    appendLine()
+                    appendLine("--- ORIGINAL CONTENT ---")
+                    append(originalText)
+                }
+            Files.writeString(target, converted, StandardCharsets.UTF_8)
+            return
+        }
+        val vf = LocalFileSystem.getInstance().findFileByNioFile(source)
+        val document = vf?.let { FileDocumentManager.getInstance().getCachedDocument(it) }
+        if (document != null && FileDocumentManager.getInstance().isDocumentUnsaved(document)) {
+            Files.writeString(target, document.text, vf.charset)
+        } else {
+            Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES)
+        }
+    }
+
+    private fun writeAutomaticBundle(
+        projectRoot: Path,
+        repositoryId: String,
+        attachment: PlannedAttachment,
+        target: Path,
+    ) {
+        val content =
+            buildString {
+                appendLine("# Automatic ${attachment.bundleGroup.ifBlank { "reference" }} context")
+                appendLine()
+                appendLine(
+                    "Generated by Copilot Context Bridge. This is a generated context bundle, not an original repository source file.",
+                )
+                appendLine("Repository: $repositoryId")
+                appendLine()
+                attachment.candidates.forEachIndexed { index, candidate ->
+                    val source = resolveCandidateSource(projectRoot, candidate)
+                    val text = readCurrentText(source)
+                    appendLine("## SOURCE FILE ${index + 1}")
+                    appendLine()
+                    appendLine("Repository: ${candidate.displayRepository.ifBlank { repositoryId }}")
+                    appendLine("Repository ID: ${candidate.repositoryId.ifBlank { repositoryId }}")
+                    appendLine("Original path: ${candidate.relativePath}")
+                    appendLine("Original SHA-256: ${sha256Text(text)}")
+                    appendLine("Original extension: ${candidate.relativePath.substringAfterLast('.', "(none)")}")
+                    appendLine("Reason included: ${candidateReason(candidate)}")
+                    appendLine("Context Policy rule: ${policyRule(candidate)}")
+                    appendLine()
+                    appendLine("```" + candidate.relativePath.substringAfterLast('.', "text"))
+                    appendLine(text)
+                    appendLine("```")
+                    appendLine()
+                }
+            }
+        Files.writeString(target, content, StandardCharsets.UTF_8)
+    }
+
+    private fun readCurrentText(source: Path): String {
+        val vf = LocalFileSystem.getInstance().findFileByNioFile(source)
+        val document = vf?.let { FileDocumentManager.getInstance().getCachedDocument(it) }
+        return if (document != null &&
+            FileDocumentManager.getInstance().isDocumentUnsaved(document)
+        ) {
+            document.text
+        } else {
+            val vf = LocalFileSystem.getInstance().findFileByNioFile(source)
+            if (vf != null) String(Files.readAllBytes(source), vf.charset) else Files.readString(source)
+        }
+    }
+
+    private fun candidateReason(candidate: nl.ferron.copilotcontextbridge.model.ContextCandidate): String =
+        candidate.relations
+            .joinToString("; ") { relation -> "${relation.type.name.lowercase()}: ${relation.evidence}" }
+            .ifBlank { if (candidate.pinned) "manually pinned" else "automatic context" }
+
+    private fun policyRule(candidate: nl.ferron.copilotcontextbridge.model.ContextCandidate): String =
+        when {
+            candidate.pinned -> "explicit.pinnedFiles"
+            candidate.relations.any { it.type.name == "RELATED_TEST" } -> "python.matchingTests"
+            candidate.relations.any { it.type.name == "DIRECT_IMPORT" } -> "python.directImports"
+            candidate.relations.any { it.type.name == "REFERENCED_CONFIGURATION" } -> "text.referencedConfiguration"
+            else -> "repository.references"
+        }
+
     private fun sha256(path: Path): String =
         "sha256:" +
             java.security.MessageDigest
                 .getInstance("SHA-256")
                 .digest(Files.readAllBytes(path))
                 .joinToString("") { "%02x".format(it) }
+
+    private fun sha256Text(text: String): String =
+        "sha256:" +
+            java.security.MessageDigest
+                .getInstance("SHA-256")
+                .digest(text.toByteArray(StandardCharsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+
+    private fun currentSourceHash(source: Path): String {
+        val vf = LocalFileSystem.getInstance().findFileByNioFile(source)
+        val document = vf?.let { FileDocumentManager.getInstance().getCachedDocument(it) }
+        return if (document != null && FileDocumentManager.getInstance().isDocumentUnsaved(document)) {
+            val bytes = document.text.toByteArray(vf.charset)
+            "sha256:" +
+                java.security.MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(bytes)
+                    .joinToString("") { "%02x".format(it) }
+        } else {
+            sha256(source)
+        }
+    }
+
+    private fun resolveCandidateSource(
+        projectRoot: Path,
+        candidate: nl.ferron.copilotcontextbridge.model.ContextCandidate,
+    ): Path = PathSafety.resolveInside(candidate.repositoryRoot ?: projectRoot, candidate.relativePath)
 }

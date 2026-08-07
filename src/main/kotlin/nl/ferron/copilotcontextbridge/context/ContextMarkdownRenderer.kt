@@ -1,10 +1,14 @@
 package nl.ferron.copilotcontextbridge.context
 
 import nl.ferron.copilotcontextbridge.model.BatchSummary
+import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.DependencyRelation
 import nl.ferron.copilotcontextbridge.model.PythonSymbol
 import nl.ferron.copilotcontextbridge.model.RankedSelection
+import nl.ferron.copilotcontextbridge.model.displayRepository
+import nl.ferron.copilotcontextbridge.model.sourceKey
 import nl.ferron.copilotcontextbridge.settings.AppSettings
+import nl.ferron.copilotcontextbridge.settings.CopilotReturnMode
 
 object ContextMarkdownRenderer {
     data class Input(
@@ -19,9 +23,12 @@ object ContextMarkdownRenderer {
         val guidelineSources: List<String>,
         val promptSkillName: String,
         val promptSkillPrompt: String,
+        val physicalAttachmentCount: Int,
         val previousBatches: List<BatchSummary>,
         val generateMermaid: Boolean,
         val includeAbsolutePath: String? = null,
+        val returnMode: CopilotReturnMode = CopilotReturnMode.COPILOT_PATCH_FILE,
+        val returnInstructions: String = AppSettings.getInstance().state.returnFileInstruction,
     )
 
     fun render(input: Input): String =
@@ -84,14 +91,57 @@ object ContextMarkdownRenderer {
             appendLine(input.repositoryTree)
             appendLine("```")
             appendLine()
-            appendLine("## Uploaded files (${input.selection.included.size + 1} total including this context file)")
+            appendLine("## Attachment plan")
             appendLine()
-            appendLine("| Staged filename | Original repository path | Selection | Depth | Relationship |")
-            appendLine("|---|---|---|---:|---|")
+            appendLine("Repository files represented: ${input.selection.included.size}")
+            appendLine("Physical Copilot attachments: ${input.physicalAttachmentCount}")
+            val repositories = input.selection.included.groupBy { repositoryLabel(it, input.repositoryId) }
+            if (repositories.size > 1 || input.selection.included.any { it.repositoryId.isNotBlank() }) {
+                appendLine("Repositories represented: ${repositories.size}")
+                appendLine()
+                appendLine("### Repository-separated source index")
+                appendLine()
+                repositories.toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (repository, candidates) ->
+                    appendLine("REPO: $repository")
+                    candidates.sortedBy { it.relativePath }.forEach { appendLine("  ${it.relativePath}") }
+                    appendLine()
+                }
+                appendLine("Paths from different repositories are independent even when their relative paths are identical.")
+            }
+            appendLine()
+            appendLine("### PINNED — kept as individual attachments")
+            appendLine()
+            input.selection.included.filter { it.pinned }.forEach { candidate ->
+                appendLine(
+                    "- `[${repositoryLabel(candidate, input.repositoryId)}] ${candidate.relativePath}` -> `${input.stagedNames.getValue(
+                        candidate.sourceKey,
+                    )}`",
+                )
+            }
+            if (input.selection.included.none { it.pinned }) appendLine("- None")
+            appendLine()
+            appendLine("### AUTOMATIC — represented in generated bundles or separate policy-required attachments")
+            appendLine()
+            input.selection.included.filterNot { it.pinned }.forEach { candidate ->
+                val reason = candidate.relations.joinToString(", ") { it.type.name.lowercase() }.ifBlank { "automatic context" }
+                appendLine(
+                    "- `[${repositoryLabel(candidate, input.repositoryId)}] ${candidate.relativePath}` -> `${input.stagedNames.getValue(
+                        candidate.sourceKey,
+                    )}` - $reason",
+                )
+            }
+            if (input.selection.included.all { it.pinned }) appendLine("- None")
+            appendLine()
+            appendLine("## Uploaded files and original-path mapping")
+            appendLine()
+            appendLine("| Prepared attachment | Repository | Original repository path | Selection | Depth | Relationship |")
+            appendLine("|---|---|---|---|---:|---|")
             input.selection.included.forEach { candidate ->
                 val relation = candidate.relations.joinToString(", ") { "${it.type} (${it.confidence})" }.ifBlank { "manual selection" }
                 appendLine(
-                    "| `${input.stagedNames[candidate.relativePath]}` | `${candidate.relativePath}` | ${if (candidate.pinned) "pinned" else "automatic"} | ${candidate.depth} | $relation |",
+                    "| `${input.stagedNames[candidate.sourceKey]}` | `${repositoryLabel(candidate, input.repositoryId)}` | " +
+                        "`${candidate.relativePath}` | ${if (candidate.pinned) "pinned" else "automatic"} | " +
+                        "${candidate.depth} | $relation |",
                 )
             }
             appendLine()
@@ -145,30 +195,45 @@ object ContextMarkdownRenderer {
             appendLine()
             appendLine(input.guidelines)
             appendLine()
-            appendLine("## WHEN RETURNING CODE CHANGES")
+            appendLine(returnHeading(input.returnMode))
             appendLine()
-            appendLine(AppSettings.getInstance().state.returnFileInstruction)
-            appendLine("Do not return complete source files unless explicitly requested.")
-            appendLine(
-                "For every function actually changed, include its original repository-relative path, fully qualified name, original SHA-256 hash, and complete replacement function including decorators, full signature, type hints, docstring and body.",
-            )
-            appendLine(
-                "Return only changed functions. Never return partial functions or use line numbers as identity. Do not invent code from omitted files. Put all replacements in one change set.",
-            )
-            appendLine()
-            appendLine("```json")
-            appendLine(
-                "{\"formatVersion\":1,\"repositoryId\":\"${input.repositoryId}\",\"sessionId\":\"${input.sessionId}\",\"summary\":{\"overview\":\"One concise paragraph.\",\"functions\":[{\"path\":\"src/example.py\",\"qualifiedName\":\"Example.run\",\"change\":\"What changed\",\"reason\":\"Why\"}],\"testsPerformed\":[\"Exact tests actually run, or: Not run\"],\"risks\":[\"Known risk, or: None known\"],\"limitations\":[\"Effects of omitted files, or: None\"]},\"replacements\":[{\"operation\":\"replace_function\",\"path\":\"src/example.py\",\"qualifiedName\":\"Example.run\",\"originalHash\":\"sha256:...\",\"replacement\":\"def run():\\n    ...\\n\"}]}",
-            )
-            appendLine("```")
-            appendLine()
-            appendLine(
-                "For a new function use `operation: add_function`, omit `originalHash`, provide `parentQualifiedName` (empty for module level), and optionally provide `insertAfterQualifiedName`. Never use add_function when a function with that qualified name already exists.",
-            )
-            appendLine(
-                "If returning ZIP, put `changes.json` at the root, snippets under `replacements/`, and also create `CHANGE_SUMMARY.md` using the same Overview / Functions / Tests / Risks / Limitations headings.",
-            )
+            appendLine(input.returnInstructions)
+            if (input.returnMode == CopilotReturnMode.COPILOT_PATCH_FILE) appendPatchExample(input, this)
         }
+
+    private fun repositoryLabel(
+        candidate: ContextCandidate,
+        currentRepositoryId: String,
+    ): String = if (candidate.repositoryId.isBlank()) currentRepositoryId else candidate.displayRepository
+
+    private fun returnHeading(mode: CopilotReturnMode): String =
+        when (mode) {
+            CopilotReturnMode.COPILOT_PATCH_FILE -> "## WHEN RETURNING CODE CHANGES (.copilotpatch)"
+            CopilotReturnMode.CODE_TOOL_FILES -> "## WHEN RETURNING CODE OR FILES"
+            CopilotReturnMode.TEXT_ONLY -> "## WHEN RETURNING THE RESULT"
+            CopilotReturnMode.DIRECT_REPOSITORY_EDIT -> "## WHEN APPLYING DIRECT REPOSITORY CHANGES"
+        }
+
+    private fun appendPatchExample(
+        input: Input,
+        target: StringBuilder,
+    ) {
+        target.appendLine()
+        target.appendLine("Example schema:")
+        target.appendLine()
+        target.appendLine("```json")
+        target.appendLine(
+            "{\"formatVersion\":1,\"repositoryId\":\"${input.repositoryId}\",\"sessionId\":\"${input.sessionId}\",\"summary\":{\"overview\":\"One concise paragraph.\",\"functions\":[{\"path\":\"src/example.py\",\"qualifiedName\":\"Example.run\",\"change\":\"What changed\",\"reason\":\"Why\"}],\"testsPerformed\":[\"Exact tests actually run, or: Not run\"],\"risks\":[\"Known risk, or: None known\"],\"limitations\":[\"Effects of omitted files, or: None\"]},\"replacements\":[{\"operation\":\"replace_function\",\"path\":\"src/example.py\",\"qualifiedName\":\"Example.run\",\"originalHash\":\"sha256:...\",\"replacement\":\"def run():\\n    ...\\n\"}]}",
+        )
+        target.appendLine("```")
+        target.appendLine()
+        target.appendLine(
+            "For a new function use `operation: add_function`, omit `originalHash`, provide `parentQualifiedName` (empty for module level), and optionally provide `insertAfterQualifiedName`. Never use add_function when a function with that qualified name already exists.",
+        )
+        target.appendLine(
+            "If returning ZIP, put `changes.json` at the root, snippets under `replacements/`, and also create `CHANGE_SUMMARY.md` using the same Overview / Functions / Tests / Risks / Limitations headings.",
+        )
+    }
 
     private fun appendMermaid(
         relations: List<DependencyRelation>,

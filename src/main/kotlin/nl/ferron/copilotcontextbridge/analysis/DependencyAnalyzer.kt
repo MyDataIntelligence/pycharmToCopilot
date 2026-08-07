@@ -6,6 +6,7 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiRecursiveElementWalkingVisitor
 import com.jetbrains.python.psi.PyFile
 import nl.ferron.copilotcontextbridge.ProjectRoot
+import nl.ferron.copilotcontextbridge.context.ContextPolicyProjection
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.DependencyRelation
 import nl.ferron.copilotcontextbridge.model.RelationConfidence
@@ -13,7 +14,10 @@ import nl.ferron.copilotcontextbridge.model.RelationType
 import nl.ferron.copilotcontextbridge.security.PathSafety
 import nl.ferron.copilotcontextbridge.security.SecretDetector
 import nl.ferron.copilotcontextbridge.settings.AppSettings
+import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
+import nl.ferron.copilotcontextbridge.settings.PreviousBatchMode
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
+import nl.ferron.copilotcontextbridge.staging.TextFileSupport
 import nl.ferron.copilotcontextbridge.state.ContextSelectionService
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -21,6 +25,8 @@ import java.nio.file.Path
 
 class DependencyAnalyzer(
     private val project: Project,
+    private val policy: ContextPolicyState? = null,
+    private val additionalSeedPaths: Set<String> = emptySet(),
 ) {
     data class Result(
         val snapshot: RepositoryScanner.Snapshot,
@@ -36,8 +42,10 @@ class DependencyAnalyzer(
         val root = ProjectRoot.path(project)
         val app = AppSettings.getInstance().state
         val settings = project.getService(ProjectSettings::class.java).state
+        val projection = policy?.let { ContextPolicyProjection.from(it, settings) }
         val selection = project.getService(ContextSelectionService::class.java)
         val pinned = selection.pinnedPaths().toSet()
+        val seedPaths = pinned + additionalSeedPaths
         val scanner = RepositoryScanner(root, app.ignorePatterns, settings.customIgnorePatterns)
         val scanned = scanner.scan()
         val explicitlyPinned =
@@ -57,7 +65,17 @@ class DependencyAnalyzer(
             )
         val byPath = snapshot.files.associateBy { it.relativePath }
         val discoveryRoots = selection.discoveryRoots()
-        val sent = selection.sentPaths()
+        val previousBatchMode =
+            policy
+                ?.previousBatchMode
+                ?.let { runCatching { PreviousBatchMode.valueOf(it) }.getOrDefault(PreviousBatchMode.SAME_SESSION_ONLY) }
+                ?: PreviousBatchMode.SAME_SESSION_ONLY
+        val sent =
+            when (previousBatchMode) {
+                PreviousBatchMode.NEVER -> emptySet()
+                PreviousBatchMode.SAME_SESSION_ONLY -> selection.sentPaths()
+                PreviousBatchMode.ALWAYS -> selection.allSentPaths()
+            }
         val psiManager = PsiManager.getInstance(project)
         val warnings = mutableListOf<String>()
         val relations = mutableListOf<DependencyRelation>()
@@ -102,25 +120,25 @@ class DependencyAnalyzer(
             )
         }
 
-        if (settings.includeReferencedConfiguration) {
+        if (projection?.configuration ?: settings.includeReferencedConfiguration) {
             addTextRelations(snapshot, root, settings.textualScanLimitBytes, relations, indicator)
         }
         addTestRelations(snapshot, relations)
 
         val secretDetector = SecretDetector(app.secretFilenamePatterns)
         val candidates = mutableListOf<ContextCandidate>()
-        val candidatePaths = linkedSetOf<String>().apply { addAll(pinned) }
+        val candidatePaths = linkedSetOf<String>().apply { addAll(seedPaths) }
         val candidateDepths =
             DependencyTraversal
                 .collect(
-                    pinned,
+                    seedPaths,
                     relations,
                     DependencyTraversal.Options(
-                        settings.includeDirectImports,
-                        settings.includeDirectDependents,
-                        settings.includeRelatedTests,
-                        settings.includeReferencedConfiguration,
-                        settings.includeSecondLevelDependencies,
+                        projection?.directImports ?: settings.includeDirectImports,
+                        projection?.directDependents ?: settings.includeDirectDependents,
+                        projection?.relatedTests ?: settings.includeRelatedTests,
+                        projection?.configuration ?: settings.includeReferencedConfiguration,
+                        projection?.secondLevel ?: settings.includeSecondLevelDependencies,
                     ),
                 ).toMutableMap()
         discoveryRoots.forEach { directory ->
@@ -132,8 +150,9 @@ class DependencyAnalyzer(
         }
 
         candidatePaths.addAll(candidateDepths.keys)
+        applyPolicyResolvers(snapshot, seedPaths, candidatePaths, candidateDepths, relations, symbols)
 
-        if (settings.includePackageFolders) {
+        if (projection?.packageFolders ?: settings.includePackageFolders) {
             pinned.mapNotNull { it.substringBeforeLast('/', "").takeIf(String::isNotBlank) }.forEach { dir ->
                 snapshot.files.filter { it.relativePath.startsWith("$dir/") }.forEach {
                     candidatePaths += it.relativePath
@@ -152,7 +171,7 @@ class DependencyAnalyzer(
                 warnings += "Pinned path no longer exists: $relative"
                 return@forEach
             }
-            if (!RepositoryScanner.isSupportedText(entry.path)) {
+            if (!TextFileSupport.isLikelyText(entry.path)) {
                 candidates +=
                     baseCandidate(
                         entry,
@@ -168,21 +187,28 @@ class DependencyAnalyzer(
             }
             val relevant =
                 relations.filter { relation ->
-                    (relation.to == relative && relation.from in pinned) || (relation.from == relative && relation.to in pinned)
+                    (relation.to == relative && relation.from in candidatePaths) ||
+                        (relation.from == relative && relation.to in candidatePaths)
                 }
             val relationType =
                 when {
                     relative in pinned -> RelationType.PINNED
-                    candidateDepths[relative] == 2 -> RelationType.SECOND_LEVEL
+                    relative in additionalSeedPaths -> RelationType.BRANCH_CHANGE
+                    relevant.any { it.type == RelationType.TEST_FIXTURE } -> RelationType.TEST_FIXTURE
+                    relevant.any { it.type == RelationType.TEMPLATE } -> RelationType.TEMPLATE
+                    relevant.any { it.type == RelationType.SIMILAR_IMPLEMENTATION } -> RelationType.SIMILAR_IMPLEMENTATION
+                    relevant.any { it.type == RelationType.INSTRUCTION } -> RelationType.INSTRUCTION
                     relevant.any { it.type == RelationType.DIRECT_IMPORT && it.from in pinned } -> RelationType.DIRECT_IMPORT
                     relevant.any { it.type == RelationType.RELATED_TEST } -> RelationType.RELATED_TEST
                     relevant.any { it.to in pinned } -> RelationType.DIRECT_DEPENDENT
+                    candidateDepths[relative] == 2 -> RelationType.SECOND_LEVEL
                     relative.endsWith("/__init__.py") || relative == "__init__.py" -> RelationType.PACKAGE_INIT
                     relative in setOf("pyproject.toml", "setup.cfg", "tox.ini") -> RelationType.PROJECT_CONFIGURATION
-                    settings.includePackageFolders -> RelationType.SAME_PACKAGE
+                    (projection?.packageFolders ?: settings.includePackageFolders) -> RelationType.SAME_PACKAGE
                     else -> relevant.firstOrNull()?.type ?: RelationType.SECOND_LEVEL
                 }
             var score = settings.scores[relationType.name] ?: 0
+            score += policyPriorityAdjustment(relationType)
             val generated = relative.contains("/generated/") || relative.startsWith("generated/") || relative.contains("/build/")
             if (generated) score += settings.scores["GENERATED_PENALTY"] ?: -500
             val text = if (settings.detectLikelySecrets && entry.size <= settings.textualScanLimitBytes) readText(entry.path) else null
@@ -190,7 +216,7 @@ class DependencyAnalyzer(
             val previouslySent = relative in sent
             val ignored =
                 if (previouslySent &&
-                    settings.avoidPreviouslySentFiles &&
+                    (projection?.avoidPrevious ?: settings.avoidPreviouslySentFiles) &&
                     relative !in pinned
                 ) {
                     "already exported in an earlier batch"
@@ -201,6 +227,101 @@ class DependencyAnalyzer(
         }
 
         return Result(snapshot, scanner.renderTree(snapshot, root.fileName.toString()), candidates, relations.distinct(), symbols, warnings)
+    }
+
+    private fun applyPolicyResolvers(
+        snapshot: RepositoryScanner.Snapshot,
+        seedPaths: Set<String>,
+        candidatePaths: MutableSet<String>,
+        candidateDepths: MutableMap<String, Int>,
+        relations: MutableList<DependencyRelation>,
+        symbols: Map<String, List<nl.ferron.copilotcontextbridge.model.PythonSymbol>>,
+    ) {
+        val activePolicy = policy ?: return
+
+        fun include(
+            source: String,
+            target: String,
+            type: RelationType,
+            evidence: String,
+        ) {
+            candidatePaths += target
+            candidateDepths[target] = minOf(candidateDepths[target] ?: Int.MAX_VALUE, 1)
+            relations += DependencyRelation(source, target, type, RelationConfidence.INFERRED, evidence = evidence)
+        }
+
+        activePolicy.rules.firstOrNull { it.enabled && it.resolver == "tests.fixtures" }?.let { rule ->
+            val tests = candidatePaths.filter { it.substringAfterLast('/').startsWith("test_") || "/tests/" in "/$it" }
+            val fixtures =
+                snapshot.files
+                    .filter { entry -> entry.relativePath.endsWith("conftest.py") || "/fixtures/" in "/${entry.relativePath}" }
+                    .sortedBy { it.relativePath }
+                    .take(rule.maxFiles)
+            tests.forEach { test ->
+                fixtures
+                    .filter { fixture ->
+                        fixture.relativePath == "conftest.py" ||
+                            test.startsWith(fixture.relativePath.substringBeforeLast('/', "") + "/")
+                    }.forEach { fixture -> include(test, fixture.relativePath, RelationType.TEST_FIXTURE, "test fixture for $test") }
+            }
+        }
+
+        activePolicy.rules.firstOrNull { it.enabled && it.resolver == "repository.templates" }?.let { rule ->
+            val extensions = seedPaths.map { it.substringAfterLast('.', "").lowercase() }.filter(String::isNotBlank).toSet()
+            snapshot.files
+                .filter { entry ->
+                    val lower = "/${entry.relativePath.lowercase()}/"
+                    ("/template" in lower || "/examples/" in lower) &&
+                        (extensions.isEmpty() || entry.relativePath.substringAfterLast('.', "").lowercase() in extensions)
+                }.sortedBy { it.relativePath }
+                .take(rule.maxFiles)
+                .forEach { template ->
+                    include(seedPaths.firstOrNull().orEmpty(), template.relativePath, RelationType.TEMPLATE, "repository template/example")
+                }
+        }
+
+        activePolicy.rules.firstOrNull { it.enabled && it.resolver == "repository.similarImplementations" }?.let { rule ->
+            val seedSymbols = seedPaths.flatMap { path -> symbols[path].orEmpty() }.map { it.qualifiedName.substringAfterLast('.') }.toSet()
+            symbols.entries
+                .asSequence()
+                .filter { (path, values) -> path !in seedPaths && values.any { it.qualifiedName.substringAfterLast('.') in seedSymbols } }
+                .sortedBy { it.key }
+                .take(rule.maxFiles)
+                .forEach { (path) ->
+                    include(
+                        seedPaths.firstOrNull().orEmpty(),
+                        path,
+                        RelationType.SIMILAR_IMPLEMENTATION,
+                        "shares repository symbols with selected code",
+                    )
+                }
+        }
+
+        val instructionResolvers =
+            activePolicy.rules.filter {
+                it.enabled && it.resolver in setOf("guidelines.agents", "guidelines.copilotInstructions", "guidelines.project")
+            }
+        if (instructionResolvers.isNotEmpty()) {
+            val instructionPaths =
+                snapshot.files
+                    .map { it.relativePath }
+                    .filter { path ->
+                        path == "AGENTS.md" ||
+                            path.endsWith("/AGENTS.md") ||
+                            path == ".github/copilot-instructions.md" ||
+                            path.endsWith("SKILL.md") ||
+                            path == "CONTRIBUTING.md"
+                    }.sorted()
+                    .take(instructionResolvers.maxOf { it.maxFiles })
+            instructionPaths.forEach { path ->
+                include(
+                    seedPaths.firstOrNull().orEmpty(),
+                    path,
+                    RelationType.INSTRUCTION,
+                    "repository instruction selected by Context Policy",
+                )
+            }
+        }
     }
 
     private fun baseCandidate(
@@ -226,7 +347,41 @@ class DependencyAnalyzer(
         ignoredReason = ignored,
         previouslySent = entry.relativePath in sent,
         size = entry.size,
+        sha256 = sha256(entry.path),
     )
+
+    private fun sha256(path: Path): String =
+        runCatching {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            Files.newInputStream(path).use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            "sha256:" + digest.digest().joinToString("") { "%02x".format(it) }
+        }.getOrDefault("")
+
+    private fun policyPriorityAdjustment(type: RelationType): Int {
+        val resolver =
+            when (type) {
+                RelationType.PINNED -> "explicit.pinnedFiles"
+                RelationType.RELATED_TEST -> "python.matchingTests"
+                RelationType.DIRECT_IMPORT -> "python.directImports"
+                RelationType.DIRECT_DEPENDENT -> "python.directCallers"
+                RelationType.REFERENCED_CONFIGURATION -> "text.referencedConfiguration"
+                RelationType.SECOND_LEVEL -> "python.transitiveImports"
+                RelationType.BRANCH_CHANGE -> "git.branchChanges"
+                RelationType.TEST_FIXTURE -> "tests.fixtures"
+                RelationType.TEMPLATE -> "repository.templates"
+                RelationType.SIMILAR_IMPLEMENTATION -> "repository.similarImplementations"
+                RelationType.INSTRUCTION -> "guidelines.project"
+                else -> return 0
+            }
+        return (policy?.priorityFor(resolver, 0) ?: 0) * 10
+    }
 
     private fun addTestRelations(
         snapshot: RepositoryScanner.Snapshot,

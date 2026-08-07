@@ -28,6 +28,7 @@
         <projectService serviceImplementation="nl.ferron.copilotcontextbridge.settings.ProjectSettings"/>
         <projectService serviceImplementation="nl.ferron.copilotcontextbridge.state.ContextSelectionService"/>
         <projectService serviceImplementation="nl.ferron.copilotcontextbridge.context.ContextPackService"/>
+        <projectService serviceImplementation="nl.ferron.copilotcontextbridge.external.ExternalRepositorySelectionRegistry"/>
         <applicationConfigurable id="nl.ferron.copilotcontextbridge.settings.application"
                                  displayName="Copilot Context Bridge"
                                  instance="nl.ferron.copilotcontextbridge.settings.AppSettingsConfigurable"/>

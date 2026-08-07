@@ -3,6 +3,7 @@ package nl.ferron.copilotcontextbridge.ui
 import com.intellij.icons.AllIcons
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.ide.CopyPasteManager
@@ -14,7 +15,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
-import nl.ferron.copilotcontextbridge.patch.PatchDiffFormatter
+import nl.ferron.copilotcontextbridge.patch.JetBrainsDiffFacade
 import nl.ferron.copilotcontextbridge.patch.PatchImportService
 import nl.ferron.copilotcontextbridge.patch.PatchValidator
 import nl.ferron.copilotcontextbridge.patch.PostApplyValidationService
@@ -26,8 +27,8 @@ import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Font
 import java.awt.datatransfer.DataFlavor
-import java.awt.event.HierarchyEvent
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 import javax.swing.BorderFactory
 import javax.swing.Box
 import javax.swing.BoxLayout
@@ -35,9 +36,7 @@ import javax.swing.JButton
 import javax.swing.JCheckBox
 import javax.swing.JLabel
 import javax.swing.JPanel
-import javax.swing.JSplitPane
 import javax.swing.SwingConstants
-import javax.swing.SwingUtilities
 import javax.swing.TransferHandler
 
 /** Secure inbound workflow for complete Python-function replacements. */
@@ -46,12 +45,14 @@ class PatchImportPanel(
 ) : JPanel(BorderLayout(6, 6)) {
     private val json = JBTextArea(6, 50)
     private val rows = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
-    private val diff = JBTextArea(14, 55).apply { isEditable = false }
-    private val diffTitle = JLabel("Function diff")
+
+    // Retained as internal state only for compatibility with existing rendering paths; no textual diff widget is shown.
+    private val diff = JBTextArea().apply { isEditable = false }
+    private val diffTitle = JLabel()
     private val validation = JLabel("Schema  ·  Paths  ·  Functions  ·  Hashes")
     private val changesTitle = JLabel("3. Changes found")
     private val applyButton =
-        JButton("Apply selected functions").apply {
+        JButton("Apply selected changes").apply {
             putClientProperty("JButton.buttonType", "default")
             addActionListener { applySelected() }
         }
@@ -59,6 +60,8 @@ class PatchImportPanel(
     private var current: PatchValidator.Result? = null
     private val selections = mutableMapOf<String, JCheckBox>()
     private val forces = mutableMapOf<String, JCheckBox>()
+    private val diffFacade = JetBrainsDiffFacade(project)
+    private val validationGeneration = AtomicLong()
 
     init {
         border = JBUI.Borders.empty(8)
@@ -133,42 +136,23 @@ class PatchImportPanel(
     private fun createChangesPanel() =
         JPanel(BorderLayout(5, 5)).apply {
             border = cardBorder()
-            val diffPanel =
-                JPanel(BorderLayout(4, 4)).apply {
-                    add(
-                        JPanel(BorderLayout()).apply {
-                            add(diffTitle, BorderLayout.CENTER)
-                            add(JButton("View combined diff").apply { addActionListener { showCombinedDiff() } }, BorderLayout.EAST)
-                        },
-                        BorderLayout.NORTH,
-                    )
-                    add(JBScrollPane(diff), BorderLayout.CENTER)
-                }
-            val split =
-                JSplitPane(JSplitPane.VERTICAL_SPLIT, JBScrollPane(rows), diffPanel).apply {
-                    resizeWeight = 0.5
-                    isOneTouchExpandable = true
-                    isContinuousLayout = true
-                    border = null
-                    addHierarchyListener { event ->
-                        if (
-                            event.changeFlags and HierarchyEvent.SHOWING_CHANGED.toLong() != 0L &&
-                            isShowing &&
-                            getClientProperty("initialDividerSet") != true
-                        ) {
-                            putClientProperty("initialDividerSet", true)
-                            SwingUtilities.invokeLater { setDividerLocation(0.5) }
-                        }
-                    }
-                }
-            add(split, BorderLayout.CENTER)
+            add(
+                JPanel(BorderLayout()).apply {
+                    add(JLabel("Review changes in PyCharm's native Diff viewer."), BorderLayout.CENTER)
+                    add(JButton("View combined diff").apply { addActionListener { showCombinedDiff() } }, BorderLayout.EAST)
+                },
+                BorderLayout.NORTH,
+            )
+            add(JBScrollPane(rows), BorderLayout.CENTER)
             add(
                 JPanel().apply {
                     layout = BoxLayout(this, BoxLayout.Y_AXIS)
                     add(
                         JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
+                            add(JButton("Select all").apply { addActionListener { selectAll() } })
                             add(JButton("Select safe").apply { addActionListener { selectSafe() } })
                             add(JButton("Deselect conflicts").apply { addActionListener { deselectConflicts() } })
+                            add(JButton("Clear").apply { addActionListener { clearImport() } })
                         },
                     )
                     add(applyButton.apply { maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height) })
@@ -191,7 +175,7 @@ class PatchImportPanel(
         FileChooser.chooseFile(descriptor, project, null)?.let { loadFile(File(it.path)) }
     }
 
-    private fun loadFile(file: File) {
+    fun loadFile(file: File) {
         loadInBackground("Validating Copilot patch") { PatchImportService(project).load(file.toPath()) }
     }
 
@@ -215,11 +199,13 @@ class PatchImportPanel(
         title: String,
         loader: () -> PatchValidator.Result,
     ) {
+        val generation = validationGeneration.incrementAndGet()
         validation.text = "Validating schema, paths, functions and hashes…"
         object : Task.Backgroundable(project, title, true) {
             override fun run(indicator: ProgressIndicator) {
                 val outcome = runCatching(loader)
                 ApplicationManager.getApplication().invokeLater {
+                    if (generation != validationGeneration.get()) return@invokeLater
                     outcome
                         .onSuccess(::showResult)
                         .onFailure { showError(it.message ?: "Patch could not be loaded.") }
@@ -241,7 +227,7 @@ class PatchImportPanel(
                 "⚠ Validation failed — ${result.validation.errors.size} issue(s)"
             }
         validation.foreground = if (validSchema) JBColor(0x258A4A, 0x61C879) else JBColor(0xB45309, 0xE6A34A)
-        changesTitle.text = "3. Changes found (${result.targets.size} functions)"
+        changesTitle.text = "3. Changes found (${result.targets.size})"
         result.validation.patch?.summary?.let { summary ->
             if (summary.overview.isNotBlank()) rows.add(JLabel("Summary: ${summary.overview}"))
         }
@@ -269,8 +255,14 @@ class PatchImportPanel(
         val key = "${item.request.path}::${item.request.qualifiedName}"
         val safe = item.status in setOf(ReplacementStatus.MATCH, ReplacementStatus.NEW)
         val selectable = safe || item.status == ReplacementStatus.CHANGED
+        val displayName =
+            if (item.request.operation.endsWith("_file")) {
+                if (item.request.operation == "add_file") "Add file" else "Delete file"
+            } else {
+                "${item.request.qualifiedName}()"
+            }
         val selected =
-            JCheckBox("${item.request.qualifiedName}()", item.selected && safe).apply {
+            JCheckBox(displayName, selectable).apply {
                 isEnabled = selectable
                 toolTipText = item.request.path
                 addActionListener {
@@ -282,9 +274,9 @@ class PatchImportPanel(
             }
         selections[key] = selected
         val force =
-            JCheckBox("Force replace", false).apply {
+            JCheckBox("Use Copilot version", false).apply {
                 isVisible = item.status == ReplacementStatus.CHANGED
-                toolTipText = "Explicitly overwrite a function that changed locally after export"
+                toolTipText = "Explicitly choose the Copilot proposal after reviewing the 3-way diff"
                 addActionListener { updateApplyCaption() }
             }
         forces[key] = force
@@ -327,8 +319,27 @@ class PatchImportPanel(
                     BorderLayout.CENTER,
                 )
                 if (force.isVisible) add(force, BorderLayout.SOUTH)
+                add(
+                    JButton(if (item.status == ReplacementStatus.CHANGED) "Open 3-way diff" else "Open diff").apply {
+                        addActionListener {
+                            diffFacade.showFunctionDiff(item) { include, useCopilot ->
+                                ApplicationManager.getApplication().invokeLater {
+                                    selected.isSelected = include
+                                    force.isSelected = useCopilot
+                                    updateApplyCaption()
+                                }
+                            }
+                        }
+                    },
+                    BorderLayout.EAST,
+                )
             },
         )
+    }
+
+    private fun selectAll() {
+        selections.values.filter { it.isEnabled }.forEach { it.isSelected = true }
+        updateApplyCaption()
     }
 
     private fun selectSafe() {
@@ -343,8 +354,7 @@ class PatchImportPanel(
 
     private fun showCombinedDiff() {
         val targets = current?.targets.orEmpty()
-        diff.text = PatchDiffFormatter.combined(targets)
-        diff.caretPosition = 0
+        diffFacade.showCombinedDiff(targets.map { it.validated })
         diffTitle.text = "Combined diff — ${targets.size} replacement(s)"
     }
 
@@ -354,6 +364,23 @@ class PatchImportPanel(
             forces[key]?.isSelected = false
         }
         updateApplyCaption()
+    }
+
+    fun clearImport() {
+        validationGeneration.incrementAndGet()
+        current = null
+        json.text = ""
+        rows.removeAll()
+        selections.clear()
+        forces.clear()
+        diff.text = ""
+        diffTitle.text = ""
+        validation.text = "Schema  ·  Paths  ·  Functions  ·  Hashes"
+        changesTitle.text = "3. Changes found"
+        applyButton.isEnabled = false
+        (inputCards.layout as CardLayout).show(inputCards, "drop")
+        rows.revalidate()
+        rows.repaint()
     }
 
     private fun updateApplyCaption() {
@@ -372,19 +399,116 @@ class PatchImportPanel(
         val forced = forces.filterValues { it.isSelected }.keys
         val conflictsWithoutForce = selected.filter { key -> forces[key]?.isVisible == true && forces[key]?.isSelected != true }
         if (conflictsWithoutForce.isNotEmpty()) {
-            showError("Select Force replace for each local conflict, or deselect the conflicting function.")
+            val details =
+                conflictsWithoutForce.joinToString("\n\n") { key ->
+                    val target =
+                        result.targets
+                            .first { "${it.validated.request.path}::${it.validated.request.qualifiedName}" == key }
+                            .validated
+                    "WHAT: The local ${if (target.request.operation.endsWith("_file")) "file" else "function"} changed after export.\n" +
+                        "WHERE: $key\n" +
+                        "WHY: The Copilot proposal was generated against an older function hash.\n" +
+                        "EXPECTED: ${target.request.originalHash}\n" +
+                        "CURRENT: ${if (target.request.operation.endsWith(
+                                "_file",
+                            )
+                        ) {
+                            nl.ferron.copilotcontextbridge.patch.FileContentHasher.hash(
+                                target.oldText,
+                            )
+                        } else {
+                            nl.ferron.copilotcontextbridge.analysis.FunctionHasher
+                                .hash(target.oldText)
+                        }}\n" +
+                        "HOW TO RESOLVE: Open the 3-way diff, then choose Use Copilot version or deselect the change."
+                }
+            UiSupport.notify(project, "Resolve import conflicts", details.replace("\n", "<br>"), NotificationType.WARNING)
             return
         }
-        if (forced.isNotEmpty() &&
-            Messages.showYesNoDialog(
-                project,
-                "Force-replace ${forced.size} locally changed function(s)?",
-                "Confirm Force Replace",
-                null,
-            ) != Messages.YES
-        ) {
-            return
+        revalidateBeforeApply(result, selected, forced)
+    }
+
+    private fun revalidateBeforeApply(
+        reviewed: PatchValidator.Result,
+        selected: Set<String>,
+        forced: Set<String>,
+    ) {
+        val patch = reviewed.validation.patch ?: return
+        val generation = validationGeneration.incrementAndGet()
+        validation.text = "Revalidating paths, PSI targets and hashes before Apply…"
+        object : Task.Backgroundable(project, "Revalidating Copilot changes", true) {
+            override fun run(indicator: ProgressIndicator) {
+                val refreshed =
+                    ReadAction
+                        .nonBlocking<PatchValidator.Result> {
+                            PatchValidator(project).validate(patch)
+                        }.executeSynchronously()
+                ApplicationManager.getApplication().invokeLater {
+                    if (generation != validationGeneration.get()) return@invokeLater
+                    val reviewedState = validationFingerprint(reviewed)
+                    val refreshedState = validationFingerprint(refreshed)
+                    if (reviewedState != refreshedState || refreshed.validation.errors.isNotEmpty()) {
+                        showResult(refreshed)
+                        UiSupport.notify(
+                            project,
+                            "Import changed during review",
+                            "Files, functions or hashes changed after validation. The import was refreshed; review the native diffs again.",
+                            NotificationType.WARNING,
+                        )
+                        return@invokeLater
+                    }
+                    if (
+                        Messages.showYesNoDialog(
+                            project,
+                            "Apply ${selected.size} selected change(s) as one Undoable PyCharm operation?" +
+                                if (forced.isEmpty()) "" else "\n\n${forced.size} conflict decision(s) will use the Copilot version.",
+                            "Confirm Copilot Function Replacements",
+                            "Apply selected",
+                            "Cancel",
+                            null,
+                        ) != Messages.YES
+                    ) {
+                        validation.text = "Apply cancelled; reviewed changes remain loaded."
+                        return@invokeLater
+                    }
+                    val deleteCount =
+                        refreshed.targets.count { target ->
+                            target.validated.request.operation == "delete_file" &&
+                                "${target.validated.request.path}::${target.validated.request.qualifiedName}" in selected
+                        }
+                    if (
+                        deleteCount > 0 &&
+                        Messages.showYesNoDialog(
+                            project,
+                            "This will delete $deleteCount project file(s). The deletion is Undoable in PyCharm, but only continue after reviewing each deletion diff.",
+                            "Confirm File Deletion",
+                            "Delete selected files",
+                            "Cancel",
+                            Messages.getWarningIcon(),
+                        ) != Messages.YES
+                    ) {
+                        validation.text = "File deletion cancelled; reviewed changes remain loaded."
+                        return@invokeLater
+                    }
+                    applyValidated(refreshed, selected, forced)
+                }
+            }
+        }.queue()
+    }
+
+    private fun validationFingerprint(result: PatchValidator.Result): List<String> =
+        result.targets.map { target ->
+            val item = target.validated
+            "${item.request.path}::${item.request.qualifiedName}:${item.status}:" +
+                nl.ferron.copilotcontextbridge.analysis.FunctionHasher
+                    .hash(item.oldText)
         }
+
+    private fun applyValidated(
+        result: PatchValidator.Result,
+        selected: Set<String>,
+        forced: Set<String>,
+    ) {
         val applied = PythonFunctionReplacementService(project).apply(result, selected, forced)
         UiSupport.notify(
             project,

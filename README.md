@@ -1,10 +1,10 @@
 # Copilot Context Bridge
 
-A native PyCharm plugin that prepares safe, batch-aware repository context for Microsoft 365 Copilot and imports complete Python function changes back through validated PSI operations.
+A native PyCharm plugin that prepares safe, batch-aware repository context for Microsoft 365 Copilot or GitHub Copilot, and imports reviewed Python function and file changes through validated PSI/write-command operations.
 
 ## Install after cloning
 
-On Windows, close PyCharm and run:
+Close PyCharm, then run on Windows:
 
 ```powershell
 git clone https://github.com/MyDataIntelligence/pycharmToCopilot.git
@@ -12,77 +12,107 @@ cd pycharmToCopilot
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-The script builds with the included Gradle Wrapper, detects the newest compatible PyCharm profile, installs atomically, and keeps the previous plugin directory in `%LOCALAPPDATA%\CopilotContextBridge\plugin-backups`. Backups deliberately stay outside PyCharm's plugin directory so the IDE cannot load a stale duplicate plugin ID. Use `-BuildOnly`, `-TargetConfigDir`, or `-PluginsDir` when needed. The first build downloads the PyCharm SDK and can take several minutes.
+The script builds with the included Gradle Wrapper, detects the newest compatible PyCharm profile, installs atomically, and keeps the previous plugin under `%LOCALAPPDATA%\CopilotContextBridge\plugin-backups`. Backups deliberately remain outside PyCharm's plugin directory so the IDE cannot load a duplicate plugin ID. The first build downloads the PyCharm SDK and can take several minutes.
 
-Manual fallback: run `gradlew.bat buildPlugin`, then choose **Settings → Plugins → gear → Install Plugin from Disk** and select `build/distributions/copilot-context-bridge-1.0.0.zip`.
+Useful installer options:
 
-Supported IDEs: PyCharm Community/Professional 2025.1–2025.2 and unified PyCharm free/Pro 2025.3–2026.2. The plugin uses only `PythonCore` APIs. Build toolchain: JDK 21, Gradle 9.5.0, Kotlin 2.1.20, IntelliJ Platform Gradle Plugin 2.18.1. On Windows the installer builds in `%LOCALAPPDATA%` to avoid OneDrive locking Gradle's generated files, then copies the final ZIP back to `build/distributions`.
+```powershell
+.\install.ps1 -BuildOnly
+.\install.ps1 -TargetConfigDir "$env:APPDATA\JetBrains\PyCharm2026.2"
+.\install.ps1 -PluginsDir "D:\custom\pycharm\plugins"
+```
 
-## Live screenshots
+Manual fallback: run `.\gradlew.bat buildPlugin`, then choose **Settings → Plugins → gear → Install Plugin from Disk** and select `build/distributions/copilot-context-bridge-1.0.0.zip`.
 
-- [Main three-step batch workflow](docs/screenshots/live-main-layout.png)
-- [Project View multi-select actions](docs/screenshots/live-project-menu-multiselect.png)
-- [Prompt skill editor](docs/screenshots/live-prompt-skills.png)
-- [Validated function-level import](docs/screenshots/live-import-final-validated.png)
-- [Staged file accepted by Microsoft 365 Copilot](docs/screenshots/live-m365-file-attached.png)
+Supported IDE builds are declared as 251 through 262 (`since-build=251`, `until-build=262.*`). The plugin is compiled against PyCharm Community 2025.2.6.1. Its configured verifier matrix covers Community/Professional 2025.1–2025.2 and unified PyCharm 2026.2.0.1. PyCharm 2026.2 is the current stable release used for the live release matrix; compatibility is considered proven only after Plugin Verifier and that live matrix pass. The plugin uses `PythonCore`, so the intended targets are free/Community and Professional editions.
 
-## Outbound workflow
+Build toolchain: JDK 21, Gradle 9.5.0, Kotlin 2.1.20, IntelliJ Platform Gradle Plugin 2.18.1. On Windows the installer builds below `%LOCALAPPDATA%` to avoid OneDrive locks, then copies the ZIP to `build/distributions`.
 
-1. Select files or a directory in Project View and choose **Copilot Context Bridge → Add to Copilot Context**, **Add with Dependencies**, or **Add with Prompt Skill**.
-2. Directories act as discovery roots; they are never upload items. **Add Repository Structure** adds the complete filtered tree without uploading every file.
-3. Open the tool window, choose a prompt skill, review pinned/automatic/omitted candidates and press the green **Prepare for Copilot** button.
-4. Drag the real staged files, copy them, or open the staging folder. Every batch includes `00_REPO_CONTEXT.md` and at most 19 source files.
-5. The dashed area is only a drag handle after preparation; before that it clearly says drag is unavailable. **Copy files**, **Copy text**, **Open folder** and **Next batch** become available after a safe pack exists.
-6. Prepared paths move from the active selection into Batch History. Previously prepared files are excluded from later automatic batches, but **Restore** can pin them again.
-7. Press **Next batch** and select the next files. Each context document lists earlier prepared batches and tells Copilot that another 20 files or more batches may follow.
+## Primary outbound workflow
 
-The plugin cannot prove that an external browser accepted a drop. History therefore says “prepared”, not “uploaded”. The context asks the user to confirm when every intended batch has arrived.
+1. Multi-select files in Project View and choose **Copilot Context Bridge → Add to Copilot Context**, **Add with Dependencies**, or **Add with Prompt Skill**. Repeat from other folders; pinned paths persist together.
+2. In the tool window, verify **Files in this batch**, choose a Prompt Library entry, and review its Context Policy.
+3. Press the green **Prepare for Copilot** button. This creates a safe temporary pack and never changes repository files.
+4. Drag or copy the real staged attachments, or open the staging folder as the reliable fallback.
+5. Start **Next batch** when more context is needed. History records what was prepared; a new conversation session excludes old batches from current-session reasoning.
 
-## Prompt skills and guidelines
+Directories are discovery roots, not upload items. **Add Repository Structure** includes the filtered tree without selecting every file. The plugin cannot prove that a browser accepted a drop, so history says “prepared”, not “uploaded”. The generated prompt says that another 20 files or more batches may follow and asks the user to confirm when the intended set is complete.
 
-Prompt Skills combine a task prompt with editable skill-specific guidelines. The leading built-ins are **General change**, **New reusable Python code**, **Fix issue**, **Create implementation-ready user story**, **Repository code review** and **Refactor selected code**. The new-code workflow prefers proven repository placement, otherwise `scripts/functions/` or `scripts/`, and requires a production module plus matching tests. Review is read-only and prioritizes concrete reuse, duplication and guideline evidence; Refactor can produce an explicit behavior-preserving patch/ZIP. Additional built-ins cover documentation, tests and architecture, plus **Skill Creator**, **Slash Command Creator** and **AGENTS.md Creator**. Skills can be added, duplicated, changed, imported or exported. The editor uses vertically resizable, word-wrapped prompt and guideline panes so long instructions remain usable in a narrow tool window.
+## Context-aware Prompt Library
 
-The main tool window intentionally has three destinations: **Batch** for the primary workflow, **Import** only for patch validation/diffs/apply, and **More** for context preview, guidelines, prompt skills, settings, quick-copy actions and batch history.
+Every Prompt Library entry owns:
 
-Effective priority is: current Copilot-chat instruction → selected skill guidelines → enabled repository guidelines → global personal guidelines → plugin defaults. Repository sources include `.github/copilot-instructions.md`, `.github/skills/code-guidelines/`, `AGENTS.md`, `CONTRIBUTING.md`, selected README sections and relevant `pyproject.toml` keys. Repository files are written only after an explicit user action.
+- its task prompt and editable prompt-specific guidelines;
+- a versioned, data-driven `ContextPolicy`;
+- target: Microsoft 365 Copilot or GitHub Copilot;
+- return mode: `.copilotpatch`, code-tool files, text-only, or direct repository editing;
+- previous-batch behavior;
+- repository-file and physical-attachment limits;
+- resolver rules with enablement, priority, required flag, depth, file limit, bundle group and keep-separate behavior;
+- optional Return Instructions appended to the inherited mode contract.
 
-## File limit and dependency ranking
+This avoids hardcoded prompt-specific `if` chains. Rules cover pinned files, matching and nearby tests, fixtures, direct imports/callers/callees, transitive imports, referenced configuration, `AGENTS.md`, Copilot instructions, project guidelines, similar implementations, templates and branch changes.
 
-The configurable maximum is 2–20 and always includes the required context document. Pinned files consume the remaining slots first. Automatic candidates use deterministic scores: direct imports 800, dependents 700, tests 650, referenced config 550, package init 450, project config 400, second-level 300, package neighbours 200 and inferred references 100. Ties use distance, confidence, size and alphabetical path.
+Built-ins include **General change**, **New reusable Python code**, **Debug problem**, **Create user story**, **Review code**, **Refactor selected code**, documentation, generated tests, architecture, branch-to-PR preparation, repository-to-user-story analysis, **Skill Creator**, **Slash Command Creator**, and **AGENTS.md Creator**. Creator prompts target GitHub Copilot direct editing where appropriate. Entries and their policies can be added, duplicated, edited, imported, exported or reset.
 
-Python PSI resolves local references where possible. Text analysis recognizes common JSON/YAML/TOML/SQL/CSV, GitHub/Azure pipeline and Fabric notebook/pipeline references. Dynamic behavior remains inferred or unresolved.
+Effective guideline priority is: current chat instruction → prompt-specific guidelines → enabled repository guidelines → global personal guidelines → plugin defaults. Sources include `.github/copilot-instructions.md`, `.github/skills/code-guidelines/`, root/scoped `AGENTS.md`, `CONTRIBUTING.md`, selected README sections and relevant `pyproject.toml` keys. Repository guidance is never silently rewritten.
 
-## Returning changes from Copilot
+## Repository context versus physical attachments
 
-Every context tells Copilot to use its code/file-creation tool and attach a real `copilot-result.copilotpatch` or ZIP instead of pasting code as normal chat text. The patch contains a structured summary and `replace_function` or `add_function` operations. A fenced JSON block is only a fallback when that Copilot interface cannot create files.
+Two limits are intentionally separate:
 
-Drop the result in **Import Changes**, open it, or paste fallback JSON. The plugin validates repository/session identity, paths and symlinks, Python syntax, qualified names, sync/async and decorator kinds, parent/anchor identity, original hashes and overlapping edits. Each function has its own status and unified diff. `CHANGED` requires explicit Force Replace; unsafe items cannot be selected.
+- `maxRepositoryFiles`: repository files the policy may analyse and pack (default 50, configurable up to 500).
+- `maxAttachments`: physical files sent to Copilot (default and maximum 20), including `00_REPO_CONTEXT.md`.
 
-Applying uses a PyCharm write command and is undoable. Only complete PSI functions are replaced or inserted; unrelated code remains untouched. New functions require `parentQualifiedName` and may specify `insertAfterQualifiedName`.
+Pinned files have priority and remain separate by default. Automatic context can be bundled into deterministic Markdown files by group (`tests`, `dependencies`, `configuration`, `instructions`, or a custom group). A physical batch can therefore represent more than 19 repository files while remaining at or below 20 attachments. The context document and session manifest map every attachment back to all original repository-relative paths. Original files are never renamed.
 
-**Paste JSON** reads fallback patch JSON directly from the system clipboard and then leaves validation as a separate explicit action.
+Candidates are ranked deterministically. Defaults include direct imports 800, dependents 700, tests 650, referenced configuration 550, package initializers 450, project configuration 400, second-level dependencies 300, package neighbours 200 and inferred relationships 100. Policy priorities affect resolver ordering; ties use dependency distance, confidence, smaller size, then alphabetical path. Included, omitted and excluded candidates retain their evidence and reason.
 
-See [context format](docs/context-format.md), [patch format](docs/copilotpatch-format.md), [dependency analysis](docs/dependency-analysis.md), [security](docs/security.md), [architecture](docs/architecture.md), and [testing](docs/testing.md).
+Exclusions can apply to the current batch, current conversation session, or permanently for the project. **Include once** overrides an exclusion for only the current batch. Starting a new session resets session-scoped history/exclusions while retaining project configuration.
+
+## Return Instructions
+
+Return Instructions inherit in this order: mode default → optional project override → prompt-specific addition. The editor shows the effective result and validates required identity and safety fields. Both **Copy context only** and **Copy return instructions** remain available as compact actions and previews; the instructions are also embedded in the prepared context.
+
+For Microsoft 365 Copilot, the default code-return contract tells Copilot to use its code/file-creation tool and attach a real downloadable result rather than ordinary chat text. Text-only output is an explicit mode, not an accidental fallback.
+
+## Import from Copilot
+
+The Import page accepts `.copilotpatch`, matching JSON, or ZIP by drop, file picker, or pasted JSON. Supported operations are:
+
+- `replace_function`: replace one complete top-level, method, async, decorated or unambiguous nested Python function;
+- `add_function`: insert one complete function at a validated module/parent/anchor;
+- `add_file`: create one complete new file at a safe repository-relative path;
+- `delete_file`: delete one existing file after path and exported-hash validation.
+
+Validation covers schema, repository/session identity, traversal/absolute/symlink paths, target type, Python syntax, qualified names, parent and anchor identity, decorators, sync/async compatibility, hashes and overlapping changes. Native PyCharm diff views show each operation; conflicts can show `BASE (exported)`, `CURRENT (local)` and `PROPOSED (Copilot)`. Safe operations can be selected individually. Conflicts require an explicit keep-current/use-Copilot decision or Force Replace.
+
+Apply runs as a PyCharm write command and supports Undo. Function operations preserve unrelated code. File additions/deletions are limited to validated project paths. Post-apply reporting distinguishes validation that actually ran from checks that were not run.
+
+See [context format](docs/context-format.md), [patch format](docs/copilotpatch-format.md), [dependency analysis](docs/dependency-analysis.md), [security](docs/security.md), [architecture](docs/architecture.md), [testing](docs/testing.md), and the [live PyCharm test matrix](docs/live-pycharm-test-matrix.md).
 
 ## Build and development
 
 ```powershell
-.\gradlew.bat clean check
-.\gradlew.bat runIde
+.\gradlew.bat clean test
+.\gradlew.bat ktlintCheck
 .\gradlew.bat buildPlugin
 .\gradlew.bat verifyPlugin
+.\gradlew.bat runIde
 ```
 
-## Security and limitations
+CI uses JDK 21, dependency caching, tests/static checks, Plugin Verifier and uploads the built ZIP. It does not publish to Marketplace.
 
-- Likely secrets are never selected automatically and manually pinned suspicious files require confirmation.
-- Absolute/traversal paths and symlink escapes are rejected; secret values are never logged.
-- Swing-to-browser drag support varies by OS/browser; the staging folder is the reliable fallback.
-- Static analysis cannot fully resolve dynamic imports or runtime Fabric names.
-- Omitted files are listed but never presented as supplied.
-- Locally changed exported functions require conflict handling.
-- Copilot must follow the patch schema for automatic import.
-- PyCharm 2026.2's native `reformat(PyFunction)` post-processor can crash immediately after a structural replacement. On build 262 and newer the plugin preserves the already parsed replacement formatting and skips that unsafe post-step; **Code -> Reformat Code** remains available afterward.
-- Compatibility stops at build 262 until a newer IDE line is verified.
+## Security and honest limitations
+
+- Likely secrets are never automatically selected; suspicious pinned files require explicit confirmation.
+- Absolute/traversal paths, ZIP escapes and repository symlink escapes are rejected; secret contents are never logged.
+- Swing-to-browser file drag varies by OS/browser. Opening the staging folder is the reliable fallback.
+- Static analysis cannot fully resolve dynamic imports or runtime Fabric references; inferred relations remain labelled inferred.
+- Omitted files are listed but never presented as supplied or analysed in full.
+- Locally changed exported functions/files require conflict handling.
+- Automatic import depends on Copilot following the versioned patch contract.
+- PyCharm 2026.2's native `reformat(PyFunction)` post-processor may be unsafe immediately after structural replacement. On build 262+ the plugin preserves parsed replacement formatting and skips that post-step; **Code → Reformat Code** remains available afterward.
+- Compatibility beyond build 262 is not claimed until verified.
 
 Licensed under the MIT License.

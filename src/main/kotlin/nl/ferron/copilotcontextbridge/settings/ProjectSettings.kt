@@ -57,6 +57,9 @@ class ProjectSettings : PersistentStateComponent<ProjectSettings.Data> {
 
         @JvmField var postApplyCommand: String = ""
 
+        /** Blank or absent values inherit the application-level default for that return mode. */
+        @JvmField var returnInstructionOverrides: MutableMap<String, String> = mutableMapOf()
+
         @JvmField var scores: MutableMap<String, Int> = defaultScores().toMutableMap()
     }
 

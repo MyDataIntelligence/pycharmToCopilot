@@ -43,4 +43,49 @@ class ContextSelectionServiceTest : BasePlatformTestCase() {
 
         assertEquals(listOf("src/safe.py"), service.pinnedPaths())
     }
+
+    fun testNewSessionDoesNotExposeEarlierBatchesOrSentFileAvoidance() {
+        val service = project.getService(ContextSelectionService::class.java)
+        service.loadState(ContextSelectionService.Data())
+        val firstConversation = service.activeConversationSessionId()
+        service.markExported("batch-1", "General change", listOf("src/first.py"), false)
+
+        assertEquals(setOf("src/first.py"), service.sentPaths())
+        assertEquals(1, service.currentSessionBatches().size)
+
+        service.startNewSession()
+
+        assertFalse(firstConversation == service.activeConversationSessionId())
+        assertEmpty(service.sentPaths())
+        assertEquals(setOf("src/first.py"), service.allSentPaths())
+        assertEmpty(service.currentSessionBatches())
+        assertEquals(1, service.batches().size)
+        service.markExported("batch-2", "Fix issue", listOf("src/second.py"), false)
+        assertEquals(setOf("src/second.py"), service.sentPaths())
+        assertEquals(listOf("batch-2"), service.currentSessionBatches().map { it.sessionId })
+    }
+
+    fun testExclusionScopesHaveDistinctLifetimesAndIncludeOnceOverridesThem() {
+        val service = project.getService(ContextSelectionService::class.java)
+        service.loadState(ContextSelectionService.Data())
+        service.excludeForBatch("src/batch.py")
+        service.excludeForSession("src/session.py")
+        service.alwaysExclude("src/permanent.py")
+
+        assertTrue("src/batch.py" in service.excludedAutomaticPaths())
+        assertTrue("src/session.py" in service.excludedAutomaticPaths())
+        assertTrue("src/permanent.py" in service.excludedAutomaticPaths())
+
+        service.includeOnce("src/permanent.py")
+        assertFalse("src/permanent.py" in service.excludedAutomaticPaths())
+
+        service.clear()
+        assertFalse("src/batch.py" in service.excludedAutomaticPaths())
+        assertTrue("src/session.py" in service.excludedAutomaticPaths())
+        assertTrue("src/permanent.py" in service.excludedAutomaticPaths())
+
+        service.startNewSession()
+        assertFalse("src/session.py" in service.excludedAutomaticPaths())
+        assertTrue("src/permanent.py" in service.excludedAutomaticPaths())
+    }
 }

@@ -16,7 +16,7 @@ object SymbolIndexer {
         PsiTreeUtil.findChildrenOfType(file, PyFunction::class.java).forEach { function ->
             val kind =
                 when {
-                    function.isAsync -> "async function"
+                    isAsync(function) -> "async function"
                     function.containingClass != null -> "method"
                     PsiTreeUtil.getParentOfType(function.parent, PyFunction::class.java) != null -> "nested function"
                     else -> "function"
@@ -31,11 +31,20 @@ object SymbolIndexer {
         var current: PsiElement? = element
         while (current != null && current !is PyFile) {
             when (current) {
-                is PyFunction -> current.name?.let(names::add)
-                is PyClass -> current.name?.let(names::add)
+                is PyFunction -> functionName(current)?.let(names::add)
+                is PyClass -> className(current)?.let(names::add)
             }
             current = current.parent
         }
         return names.asReversed().joinToString(".")
     }
+
+    fun functionName(function: PyFunction): String? = FUNCTION_DECLARATION.find(function.text)?.groupValues?.get(1)
+
+    fun isAsync(function: PyFunction): Boolean = Regex("(?m)^\\s*async\\s+def\\b").containsMatchIn(function.text)
+
+    private fun className(pyClass: PyClass): String? = CLASS_DECLARATION.find(pyClass.text)?.groupValues?.get(1)
+
+    private val FUNCTION_DECLARATION = Regex("(?m)^\\s*(?:async\\s+)?def\\s+([A-Za-z_]\\w*)\\s*\\(")
+    private val CLASS_DECLARATION = Regex("(?m)^\\s*class\\s+([A-Za-z_]\\w*)\\b")
 }

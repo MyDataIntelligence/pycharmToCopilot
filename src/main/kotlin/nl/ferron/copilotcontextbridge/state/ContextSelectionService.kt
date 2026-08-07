@@ -10,6 +10,7 @@ import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.model.BatchSummary
 import nl.ferron.copilotcontextbridge.security.PathSafety
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
 @State(name = "CopilotContextSelection", storages = [Storage(".idea/copilot-context-selection.xml")])
@@ -26,6 +27,10 @@ class ContextSelectionService(
         @JvmField var paths: MutableList<String> = mutableListOf()
 
         @JvmField var status: String = "PREPARED"
+
+        @JvmField var conversationSessionId: String = ""
+
+        @JvmField var batchNumber: Int = 0
     }
 
     class Data {
@@ -38,6 +43,18 @@ class ContextSelectionService(
         @JvmField var invalidPinnedPaths: MutableList<String> = mutableListOf()
 
         @JvmField var excludedAutomaticPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var excludedThisBatchPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var excludedThisSessionPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var alwaysExcludedPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var includeOncePaths: MutableList<String> = mutableListOf()
+
+        @JvmField var activeConversationSessionId: String = UUID.randomUUID().toString()
+
+        @JvmField var nextBatchNumber: Int = 1
     }
 
     private var data = Data()
@@ -47,6 +64,16 @@ class ContextSelectionService(
 
     override fun loadState(state: Data) {
         data = state
+        if (data.excludedThisBatchPaths.isEmpty() && data.excludedAutomaticPaths.isNotEmpty()) {
+            data.excludedThisBatchPaths.addAll(data.excludedAutomaticPaths)
+            data.excludedAutomaticPaths.clear()
+        }
+        if (data.activeConversationSessionId.isBlank()) data.activeConversationSessionId = UUID.randomUUID().toString()
+        data.nextBatchNumber = data.nextBatchNumber.coerceAtLeast(1)
+        data.batches.forEachIndexed { index, batch ->
+            if (batch.conversationSessionId.isBlank()) batch.conversationSessionId = data.activeConversationSessionId
+            if (batch.batchNumber <= 0) batch.batchNumber = index + 1
+        }
         validatePaths()
     }
 
@@ -56,7 +83,15 @@ class ContextSelectionService(
 
     fun discoveryRoots(): List<String> = data.discoveryRoots.distinct()
 
-    fun excludedAutomaticPaths(): Set<String> = data.excludedAutomaticPaths.toSet()
+    fun excludedAutomaticPaths(): Set<String> =
+        (data.alwaysExcludedPaths + data.excludedThisSessionPaths + data.excludedThisBatchPaths)
+            .toSet() - data.includeOncePaths.toSet()
+
+    fun batchExcludedPaths(): Set<String> = data.excludedThisBatchPaths.toSet()
+
+    fun sessionExcludedPaths(): Set<String> = data.excludedThisSessionPaths.toSet()
+
+    fun alwaysExcludedPaths(): Set<String> = data.alwaysExcludedPaths.toSet()
 
     fun addFiles(files: Collection<VirtualFile>) {
         val root = ProjectRoot.virtualFile(project)
@@ -95,14 +130,48 @@ class ContextSelectionService(
         fireChanged()
     }
 
-    fun excludeAutomaticPath(path: String) {
-        if (path !in data.excludedAutomaticPaths) data.excludedAutomaticPaths.add(path)
+    fun excludeAutomaticPath(path: String) = excludeForBatch(path)
+
+    fun excludeForBatch(path: String) {
+        data.includeOncePaths.remove(path)
+        if (path !in data.excludedThisBatchPaths) data.excludedThisBatchPaths.add(path)
+        fireChanged()
+    }
+
+    fun excludeForSession(path: String) {
+        data.includeOncePaths.remove(path)
+        data.excludedThisBatchPaths.remove(path)
+        if (path !in data.excludedThisSessionPaths) data.excludedThisSessionPaths.add(path)
+        fireChanged()
+    }
+
+    fun alwaysExclude(path: String) {
+        data.includeOncePaths.remove(path)
+        data.excludedThisBatchPaths.remove(path)
+        data.excludedThisSessionPaths.remove(path)
+        if (path !in data.alwaysExcludedPaths) data.alwaysExcludedPaths.add(path)
+        fireChanged()
+    }
+
+    fun includeOnce(path: String) {
+        if (path !in data.includeOncePaths) data.includeOncePaths.add(path)
+        fireChanged()
+    }
+
+    fun removePermanentExclusion(path: String) {
+        data.alwaysExcludedPaths.remove(path)
+        data.excludedThisSessionPaths.remove(path)
+        data.excludedThisBatchPaths.remove(path)
+        data.includeOncePaths.remove(path)
         fireChanged()
     }
 
     fun clearAutomaticExclusions() {
-        if (data.excludedAutomaticPaths.isEmpty()) return
-        data.excludedAutomaticPaths.clear()
+        if (data.excludedThisBatchPaths.isEmpty() && data.excludedThisSessionPaths.isEmpty() && data.alwaysExcludedPaths.isEmpty()) return
+        data.excludedThisBatchPaths.clear()
+        data.excludedThisSessionPaths.clear()
+        data.alwaysExcludedPaths.clear()
+        data.includeOncePaths.clear()
         fireChanged()
     }
 
@@ -132,16 +201,29 @@ class ContextSelectionService(
         data.pinnedPaths.clear()
         data.discoveryRoots.clear()
         data.invalidPinnedPaths.clear()
-        data.excludedAutomaticPaths.clear()
+        data.excludedThisBatchPaths.clear()
+        data.includeOncePaths.clear()
         fireChanged()
     }
 
-    fun sentPaths(): Set<String> = data.batches.flatMapTo(linkedSetOf()) { it.paths }
+    fun sentPaths(): Set<String> =
+        data.batches
+            .filter { it.conversationSessionId == data.activeConversationSessionId }
+            .flatMapTo(linkedSetOf()) { it.paths }
+
+    fun allSentPaths(): Set<String> = data.batches.flatMapTo(linkedSetOf()) { it.paths }
 
     fun batches(): List<BatchSummary> =
         data.batches.map {
             BatchSummary(it.sessionId, it.createdAt, it.promptSkillName, it.paths.toList(), it.status)
         }
+
+    fun currentSessionBatches(): List<BatchSummary> =
+        data.batches
+            .filter { it.conversationSessionId == data.activeConversationSessionId }
+            .map { BatchSummary(it.sessionId, it.createdAt, it.promptSkillName, it.paths.toList(), it.status) }
+
+    fun activeConversationSessionId(): String = data.activeConversationSessionId
 
     fun markExported(
         sessionId: String,
@@ -155,13 +237,23 @@ class ContextSelectionService(
                 createdAt = Instant.now().toString()
                 this.promptSkillName = promptSkillName
                 this.paths.addAll(paths.distinct())
+                conversationSessionId = data.activeConversationSessionId
+                batchNumber = data.nextBatchNumber
             }
         data.batches.add(batch)
+        data.nextBatchNumber++
         if (clearActive) {
             data.pinnedPaths.removeAll(paths.toSet())
             data.invalidPinnedPaths.removeAll(paths.toSet())
         }
         fireChanged()
+    }
+
+    fun startNewSession() {
+        data.activeConversationSessionId = UUID.randomUUID().toString()
+        data.nextBatchNumber = 1
+        data.excludedThisSessionPaths.clear()
+        clear()
     }
 
     fun restoreBatch(sessionId: String) {

@@ -2,6 +2,7 @@ package nl.ferron.copilotcontextbridge.context
 
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.RankedSelection
+import nl.ferron.copilotcontextbridge.model.sourceKey
 
 object DependencyRanker {
     fun allocate(
@@ -11,9 +12,9 @@ object DependencyRanker {
     ): RankedSelection {
         val errors = mutableListOf<String>()
         val warnings = mutableListOf<String>()
-        val capacity = (maximumFiles.coerceIn(2, 20) - if (reserveContextFile) 1 else 0).coerceAtLeast(0)
+        val capacity = (maximumFiles.coerceIn(1, 500) - if (reserveContextFile) 1 else 0).coerceAtLeast(0)
         val unique =
-            candidates.groupBy { it.relativePath }.values.map { group ->
+            candidates.groupBy { it.sourceKey }.values.map { group ->
                 group.maxWithOrNull(comparator())!!
             }
         val pinned = unique.filter { it.pinned }.sortedWith(comparator())
@@ -34,8 +35,8 @@ object DependencyRanker {
                 .sortedWith(comparator())
         val slots = (capacity - includedPinned.size).coerceAtLeast(0)
         val includedAutomatic = automatic.take(slots)
-        val includedPaths = (includedPinned + includedAutomatic).mapTo(hashSetOf()) { it.relativePath }
-        val omitted = unique.filterNot { it.relativePath in includedPaths }.sortedWith(comparator())
+        val includedPaths = (includedPinned + includedAutomatic).mapTo(hashSetOf()) { it.sourceKey }
+        val omitted = unique.filterNot { it.sourceKey in includedPaths }.sortedWith(comparator())
         if (omitted.isNotEmpty()) warnings += "${omitted.size} dependency candidates were omitted or blocked."
         return RankedSelection(includedPinned + includedAutomatic, omitted, errors, warnings)
     }
@@ -46,6 +47,7 @@ object DependencyRanker {
             .thenBy { it.depth }
             .thenBy { confidenceOrder(it.confidence) }
             .thenBy { it.size }
+            .thenBy { it.repositoryId.lowercase() }
             .thenBy { it.relativePath.lowercase() }
 
     private fun confidenceOrder(confidence: nl.ferron.copilotcontextbridge.model.RelationConfidence): Int =

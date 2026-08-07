@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/MyDataIntelligence/pycharmToCopilot/copilotpatch-v1.schema.json",
-  "title": "Copilot function change set",
+  "title": "Copilot Context Bridge change set",
   "type": "object",
   "required": ["formatVersion", "repositoryId", "sessionId", "replacements"],
   "properties": {
@@ -9,7 +9,12 @@
     "repositoryId": { "type": "string", "minLength": 1 },
     "sessionId": { "type": "string", "minLength": 1 },
     "summary": { "$ref": "#/$defs/summary" },
-    "replacements": { "type": "array", "minItems": 1, "maxItems": 50, "items": { "$ref": "#/$defs/change" } }
+    "replacements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/change" }
+    }
   },
   "additionalProperties": true,
   "$defs": {
@@ -22,26 +27,72 @@
         "testsPerformed": { "type": "array", "items": { "type": "string" } },
         "risks": { "type": "array", "items": { "type": "string" } },
         "limitations": { "type": "array", "items": { "type": "string" } }
-      }
+      },
+      "additionalProperties": true
     },
-    "change": {
+    "path": {
+      "type": "string",
+      "minLength": 4,
+      "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).*\\.py$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "content": {
+      "oneOf": [
+        { "required": ["replacement"], "not": { "required": ["replacementFile"] } },
+        { "required": ["replacementFile"], "not": { "required": ["replacement"] } }
+      ]
+    },
+    "common": {
       "type": "object",
-      "required": ["operation", "path", "qualifiedName"],
+      "required": ["operation", "path"],
       "properties": {
-        "operation": { "enum": ["replace_function", "add_function"] },
-        "path": { "type": "string", "pattern": "^[^/\\\\].*\\.py$" },
+        "operation": { "enum": ["replace_function", "add_function", "add_file", "delete_file"] },
+        "path": { "$ref": "#/$defs/path" },
         "qualifiedName": { "type": "string", "minLength": 1 },
-        "originalHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "originalHash": { "$ref": "#/$defs/hash" },
         "replacement": { "type": "string" },
-        "replacementFile": { "type": "string" },
+        "replacementFile": { "type": "string", "minLength": 1 },
         "parentQualifiedName": { "type": "string" },
         "insertAfterQualifiedName": { "type": "string" },
         "allowAsyncChange": { "type": "boolean" },
         "allowDecoratorKindChange": { "type": "boolean" }
       },
-      "oneOf": [
-        { "required": ["replacement"] },
-        { "required": ["replacementFile"] }
+      "additionalProperties": true
+    },
+    "change": {
+      "allOf": [
+        { "$ref": "#/$defs/common" },
+        {
+          "oneOf": [
+            {
+              "properties": { "operation": { "const": "replace_function" } },
+              "required": ["qualifiedName", "originalHash"],
+              "$ref": "#/$defs/content"
+            },
+            {
+              "properties": { "operation": { "const": "add_function" } },
+              "required": ["qualifiedName", "parentQualifiedName"],
+              "$ref": "#/$defs/content"
+            },
+            {
+              "properties": { "operation": { "const": "add_file" } },
+              "$ref": "#/$defs/content"
+            },
+            {
+              "properties": { "operation": { "const": "delete_file" } },
+              "required": ["originalHash"],
+              "not": {
+                "anyOf": [
+                  { "required": ["replacement"] },
+                  { "required": ["replacementFile"] }
+                ]
+              }
+            }
+          ]
+        }
       ]
     }
   }

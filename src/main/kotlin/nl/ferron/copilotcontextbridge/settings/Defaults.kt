@@ -16,6 +16,7 @@ object Defaults {
     val ignorePatterns =
         listOf(
             ".git/",
+            ".platform/",
             ".idea/",
             ".venv/",
             "venv/",
@@ -24,6 +25,7 @@ object Defaults {
             ".pytest_cache/",
             ".mypy_cache/",
             ".ruff_cache/",
+            ".gradle/",
             "node_modules/",
             "dist/",
             "build/",

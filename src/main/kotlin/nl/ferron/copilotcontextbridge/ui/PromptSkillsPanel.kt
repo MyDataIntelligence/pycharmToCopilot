@@ -23,6 +23,7 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
     private val model = DefaultListModel<String>()
     private val list = JBList(model)
     private val name = JBTextField()
+    private val category = JBTextField()
     private val description = JBTextField()
     private val prompt =
         JBTextArea(8, 60).apply {
@@ -41,9 +42,11 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
         val editor =
             JPanel(BorderLayout(6, 6)).apply {
                 add(
-                    JPanel(GridLayout(2, 2, 6, 6)).apply {
+                    JPanel(GridLayout(3, 2, 6, 6)).apply {
                         add(JLabel("Name"))
                         add(this@PromptSkillsPanel.name)
+                        add(JLabel("Category"))
+                        add(category)
                         add(JLabel("Description"))
                         add(description)
                     },
@@ -62,8 +65,9 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
                     BorderLayout.CENTER,
                 )
                 add(
-                    JPanel(GridLayout(2, 3, 6, 4)).apply {
+                    JPanel(GridLayout(2, 4, 6, 4)).apply {
                         add(JButton("Save skill").apply { addActionListener { saveSelected() } })
+                        add(JButton("Context Policy").apply { addActionListener { editPolicy() } })
                         add(JButton("Add").apply { addActionListener { addSkill() } })
                         add(JButton("Duplicate").apply { addActionListener { duplicateSkill() } })
                         add(JButton("Delete").apply { addActionListener { deleteSkill() } })
@@ -91,7 +95,7 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
         AppSettings
             .getInstance()
             .state.promptSkills
-            .forEach { model.addElement(it.name) }
+            .forEach { model.addElement("${it.category.ifBlank { "Custom" }}  ·  ${it.name}") }
         if (model.size > 0) list.selectedIndex = list.selectedIndex.coerceIn(0, model.size - 1)
     }
 
@@ -102,6 +106,7 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
                 .state.promptSkills
                 .getOrNull(list.selectedIndex) ?: return
         name.text = skill.name
+        category.text = skill.category
         description.text = skill.description
         prompt.text = skill.prompt
         guidelines.text = skill.guidelines
@@ -115,6 +120,7 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
                 .getOrNull(list.selectedIndex) ?: return
         if (name.text.isBlank() || prompt.text.isBlank()) return
         skill.name = name.text.trim()
+        skill.category = category.text.trim().ifBlank { "Custom" }
         skill.description = description.text.trim()
         skill.prompt = prompt.text.trim()
         skill.guidelines = guidelines.text.trim()
@@ -143,6 +149,8 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
                 source.description,
                 source.prompt,
                 source.guidelines,
+                source.contextPolicy.copyOf(),
+                source.category,
             ),
         )
         refresh()
@@ -154,6 +162,15 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
         if (skills.size <= 1 || list.selectedIndex !in skills.indices) return
         skills.removeAt(list.selectedIndex)
         refresh()
+    }
+
+    private fun editPolicy() {
+        val skill =
+            AppSettings
+                .getInstance()
+                .state.promptSkills
+                .getOrNull(list.selectedIndex) ?: return
+        if (ContextPolicyDialog(skill.name, skill.contextPolicy).showAndGet()) refresh()
     }
 
     private fun exportSkills() {

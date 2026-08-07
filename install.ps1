@@ -21,7 +21,20 @@ if (Get-Process -Name 'pycharm64','pycharm' -ErrorAction SilentlyContinue) {
 
 if (-not $env:JAVA_HOME) {
     $java = Get-Command java -ErrorAction SilentlyContinue
-    if (-not $java) { throw 'Java 17+ or a detectable PyCharm JBR is required to start the Gradle wrapper.' }
+    if (-not $java) {
+        $jbrCandidates = @(
+            Get-ChildItem -Path "$env:ProgramFiles\JetBrains\PyCharm*\jbr\bin\java.exe" -File -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "$env:LOCALAPPDATA\Programs\PyCharm*\jbr\bin\java.exe" -File -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "$env:LOCALAPPDATA\JetBrains\Toolbox\apps\PyCharm*\*\*\jbr\bin\java.exe" -File -ErrorAction SilentlyContinue
+        ) | Sort-Object LastWriteTime -Descending
+        $java = $jbrCandidates | Select-Object -First 1
+        if ($java) {
+            $env:JAVA_HOME = Split-Path -Parent (Split-Path -Parent $java.FullName)
+            Write-Host "Using PyCharm's bundled Java runtime: $env:JAVA_HOME"
+        } else {
+            throw 'Java 17+ or a detectable PyCharm bundled runtime is required to start the Gradle wrapper.'
+        }
+    }
 }
 
 Push-Location $repoRoot

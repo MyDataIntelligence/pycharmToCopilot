@@ -7,7 +7,30 @@ object CreatorPromptLibrary {
             skillCreator(),
             slashCommandCreator(),
             agentsCreator(),
-        )
+        ).onEach { skill ->
+            skill.category = "GitHub Copilot customization"
+            skill.contextPolicy = creatorPolicy(skill.id)
+        }
+
+    private fun creatorPolicy(id: String): ContextPolicyState =
+        ContextPolicyState.defaultFor(id).apply {
+            target = CopilotTarget.GITHUB_COPILOT.name
+            returnMode = CopilotReturnMode.DIRECT_REPOSITORY_EDIT.name
+            previousBatchMode = PreviousBatchMode.NEVER.name
+            maxRepositoryFiles = 80
+            rule("matching-tests")?.priority = 95
+            rule("templates")?.apply {
+                enabled = true
+                priority = 90
+                bundleGroup = "templates"
+            }
+            rule("similar-implementations")?.apply {
+                enabled = id == "skill-creator"
+                priority = 100
+                bundleGroup = "examples"
+            }
+            rule("transitive-imports")?.enabled = false
+        }
 
     private fun skillCreator() =
         AppSettings.PromptSkillState(
@@ -19,6 +42,8 @@ object CreatorPromptLibrary {
             tests, configuratie, templates, voorbeelden, documentatie en Copilot-instructies als primaire bron.
             Maak een complete, herbruikbare en repositoryspecifieke Copilot-skill voor een terugkerende taak.
             Gebruik geen algemene standaard wanneer de repository aantoonbaar een eigen patroon gebruikt.
+            Dit is een GitHub Copilot customization-taak: maak of wijzig de bestanden direct onder
+            `.github/skills/<skill-slug>/`; retourneer geen `.copilotpatch` of JSON-vervangingsset.
 
             Wanneer het doel nog niet duidelijk is, stel uitsluitend:
             «Wat wil je dat deze skill straks kan maken, wijzigen of uitvoeren?»
@@ -32,7 +57,7 @@ object CreatorPromptLibrary {
             of conflict. Beschrijf bij conflicten alle varianten, bronbestanden, praktische verschillen en aannames.
 
             Maak alleen folders met bruikbare inhoud. Minimaal vereist:
-            <skill-slug>/
+            .github/skills/<skill-slug>/
             ├── SKILL.md
             ├── skill.json
             ├── templates/
@@ -89,8 +114,11 @@ object CreatorPromptLibrary {
             recommended, optional, legacy, environment-specific of conflict en geef confidence high, medium, low
             of conflict. Benoem tegenstrijdige bronnen expliciet.
 
+            Maak het resultaat direct als `.github/prompts/<command-name>.prompt.md`; retourneer geen
+            `.copilotpatch` of JSON-vervangingsset.
+
             Volg de bestaande Copilot-folderstructuur; anders gebruik je:
-            .copilot/commands/<command-name>.md
+            .github/prompts/<command-name>.prompt.md
             Voeg alleen onderbouwde basic/advanced example-bestanden toe.
 
             Het commandbestand bevat minimaal: Purpose, Usage, Arguments, Context to inspect, Instructions to
@@ -110,7 +138,7 @@ object CreatorPromptLibrary {
             Eindoutput, in deze volgorde:
             1. Analysis: doel, commandnaam, bronnen, patronen/confidence, skills, AGENTS.md, conflicten en ontbrekende context.
             2. Folder structure.
-            3. `FILE: .copilot/commands/<command-name>.md` met volledige inhoud.
+            3. `FILE: .github/prompts/<command-name>.prompt.md` met volledige inhoud.
             4. Volledige additional examples.
             5. Validation: Command name, Arguments, Skill references, AGENTS.md references, Repository paths,
                Safety constraints, Examples en conflict count, elk passed/warning/failed.
@@ -130,6 +158,8 @@ object CreatorPromptLibrary {
             Je bent de Copilot AGENTS.md Creator. Maak of verbeter één of meer AGENTS.md-bestanden voor Copilot
             op basis van de meegestuurde repositorystructuur, code, tests, configuratie, build/CI, bestaande
             AGENTS.md en Copilot-instructies. Gebruik concrete repositorypatronen boven algemene adviezen.
+            Wijzig de benodigde root/scoped AGENTS.md-bestanden direct in de repository; retourneer geen
+            `.copilotpatch` of JSON-vervangingsset.
 
             Bepaal of een nieuwe root AGENTS.md, verbetering, scoped bestanden of een volledige set nodig is.
             Wanneer dit niet duidelijk is, vraag uitsluitend:

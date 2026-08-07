@@ -9,12 +9,17 @@ enum class RelationType {
     DIRECT_IMPORT,
     DIRECT_DEPENDENT,
     RELATED_TEST,
+    TEST_FIXTURE,
     REFERENCED_CONFIGURATION,
     PACKAGE_INIT,
     PROJECT_CONFIGURATION,
     SECOND_LEVEL,
     SAME_PACKAGE,
     TEXT_REFERENCE,
+    BRANCH_CHANGE,
+    TEMPLATE,
+    SIMILAR_IMPLEMENTATION,
+    INSTRUCTION,
 }
 
 data class DependencyRelation(
@@ -39,13 +44,27 @@ data class ContextCandidate(
     val ignoredReason: String? = null,
     val previouslySent: Boolean = false,
     val size: Long = 0,
+    val sha256: String = "",
+    /** Stable, non-machine-specific repository identifier. Empty means the open project repository. */
+    val repositoryId: String = "",
+    /** Root used only for safe source resolution; it is never rendered unless path exposure is explicitly enabled. */
+    val repositoryRoot: Path? = null,
+    val repositoryName: String = repositoryId,
 )
+
+/** Unique key used in manifests and attachment mappings without changing repository-relative paths. */
+val ContextCandidate.sourceKey: String
+    get() = if (repositoryId.isBlank()) relativePath else "$repositoryId::$relativePath"
+
+val ContextCandidate.displayRepository: String
+    get() = repositoryName.ifBlank { repositoryId.ifBlank { "current repository" } }
 
 data class RankedSelection(
     val included: List<ContextCandidate>,
     val omitted: List<ContextCandidate>,
     val validationErrors: List<String>,
     val warnings: List<String>,
+    val excluded: List<ContextCandidate> = emptyList(),
 ) {
     val valid: Boolean get() = validationErrors.isEmpty()
 }
@@ -76,7 +95,34 @@ data class ContextPack(
     val guidelineSources: List<String>,
     val estimatedBytes: Long,
     val promptSkillId: String,
+    val attachmentPlan: AttachmentPlan = AttachmentPlan.empty(),
 )
+
+data class AttachmentPlan(
+    val attachments: List<PlannedAttachment>,
+    val repositoryToAttachment: Map<String, String>,
+    val omittedByPolicy: List<ContextCandidate> = emptyList(),
+) {
+    val attachmentCount: Int get() = attachments.size + 1 // 00_REPO_CONTEXT.md
+    val repositoryFileCount: Int get() = repositoryToAttachment.size
+
+    fun attachmentFor(candidate: ContextCandidate): String? = repositoryToAttachment[candidate.sourceKey]
+
+    companion object {
+        fun empty() = AttachmentPlan(emptyList(), emptyMap())
+    }
+}
+
+data class PlannedAttachment(
+    val stagedName: String,
+    val kind: AttachmentKind,
+    val candidates: List<ContextCandidate>,
+    val bundleGroup: String = "",
+    val convertedTextCopy: Boolean = false,
+    val generatedContent: String = "",
+)
+
+enum class AttachmentKind { PINNED_ORIGINAL, AUTOMATIC_BUNDLE, GENERATED_CONTEXT }
 
 data class BatchSummary(
     val sessionId: String,

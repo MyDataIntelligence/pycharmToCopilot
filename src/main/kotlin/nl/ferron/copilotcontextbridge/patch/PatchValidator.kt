@@ -3,6 +3,8 @@ package nl.ferron.copilotcontextbridge.patch
 import com.google.gson.JsonParser
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiFileFactory
@@ -15,6 +17,7 @@ import com.jetbrains.python.psi.PyFunction
 import com.jetbrains.python.psi.PyStatement
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.analysis.FunctionHasher
+import nl.ferron.copilotcontextbridge.analysis.SymbolIndexer
 import nl.ferron.copilotcontextbridge.context.ContextPackService
 import nl.ferron.copilotcontextbridge.security.PathSafety
 import java.nio.file.Files
@@ -24,6 +27,7 @@ class PatchValidator(
     private val project: Project,
     private val testFileResolver: ((String) -> PyFile?)? = null,
     private val testRepositoryId: String? = null,
+    private val testRootVirtualFile: VirtualFile? = null,
 ) {
     data class Target(
         val validated: ValidatedReplacement,
@@ -31,6 +35,9 @@ class PatchValidator(
         val parsed: PyFunction?,
         val insertionParent: PsiElement? = null,
         val insertionAnchor: PsiElement? = null,
+        val file: PyFile? = null,
+        val fileParent: PsiDirectory? = null,
+        val fileOperationReady: Boolean = false,
     )
 
     data class Result(
@@ -43,9 +50,9 @@ class PatchValidator(
         val warnings = mutableListOf<String>()
         val rootVf =
             runCatching {
-                ProjectRoot.virtualFile(project)
+                testRootVirtualFile ?: ProjectRoot.virtualFile(project)
             }.getOrElse { return Result(PatchValidationResult(null, emptyList(), listOf("No project root."), emptyList()), emptyList()) }
-        val root = ProjectRoot.path(project)
+        val root = if (testRootVirtualFile == null) ProjectRoot.path(project) else null
         val expectedRepository = testRepositoryId ?: rootVf.name.replace(Regex("[^A-Za-z0-9._-]"), "-")
         if (patch.repositoryId !=
             expectedRepository
@@ -58,31 +65,46 @@ class PatchValidator(
             warnings += "Patch has no structured change summary. Code validation continues, but the requested summary is missing."
         }
         validateSession(patch, errors, warnings)
+        val exportedBaseTexts = loadExportedBaseTexts(patch, warnings)
         val targets =
             patch.replacements.map { request ->
                 val preliminary =
                     runCatching {
                         val relative = PathSafety.normalizeRelative(request.path)
                         require(relative.endsWith(".py", true)) { "Target must be a Python file." }
-                        val file = testFileResolver?.invoke(relative) ?: resolveProjectFile(root, rootVf, relative)
-                        if (request.operation == "add_function") {
-                            validateAddition(request, file)
-                        } else {
-                            val matches = PythonFunctionLocator.find(file, request.qualifiedName)
-                            when {
-                                matches.isEmpty() ->
-                                    Target(
-                                        invalid(request, ReplacementStatus.MISSING, "Function was not found."),
-                                        null,
-                                        null,
-                                    )
-                                matches.size > 1 ->
-                                    Target(
-                                        invalid(request, ReplacementStatus.AMBIGUOUS, "More than one function matched."),
-                                        null,
-                                        null,
-                                    )
-                                else -> validateFunction(request, matches.single())
+                        when (request.operation) {
+                            "add_file" -> validateFileAddition(request, root, rootVf, relative)
+                            "delete_file" -> {
+                                val file = testFileResolver?.invoke(relative) ?: resolveProjectFile(checkNotNull(root), rootVf, relative)
+                                validateFileDeletion(request, file)
+                            }
+                            "add_function" -> {
+                                val file = testFileResolver?.invoke(relative) ?: resolveProjectFile(checkNotNull(root), rootVf, relative)
+                                validateAddition(request, file)
+                            }
+                            else -> {
+                                val file = testFileResolver?.invoke(relative) ?: resolveProjectFile(checkNotNull(root), rootVf, relative)
+                                val matches = PythonFunctionLocator.find(file, request.qualifiedName)
+                                when {
+                                    matches.isEmpty() ->
+                                        Target(
+                                            invalid(request, ReplacementStatus.MISSING, "Function was not found."),
+                                            null,
+                                            null,
+                                        )
+                                    matches.size > 1 ->
+                                        Target(
+                                            invalid(request, ReplacementStatus.AMBIGUOUS, "More than one function matched."),
+                                            null,
+                                            null,
+                                        )
+                                    else ->
+                                        validateFunction(
+                                            request,
+                                            matches.single(),
+                                            exportedBaseTexts["${request.path}::${request.qualifiedName}"].orEmpty(),
+                                        )
+                                }
                             }
                         }
                     }.getOrElse { Target(invalid(request, ReplacementStatus.INVALID, it.message ?: "Invalid replacement."), null, null) }
@@ -120,6 +142,75 @@ class PatchValidator(
         return Result(PatchValidationResult(patch, adjusted.map { it.validated }, errors, warnings), adjusted)
     }
 
+    private fun validateFileAddition(
+        request: FunctionReplacement,
+        root: Path?,
+        rootVf: com.intellij.openapi.vfs.VirtualFile,
+        relative: String,
+    ): Target {
+        val targetPath = root?.let { PathSafety.resolveInside(it, relative, mustExist = false) }
+        require(targetPath == null || !Files.exists(targetPath)) { "Target file already exists." }
+        require(rootVf.findFileByRelativePath(relative) == null) { "Target file already exists." }
+        val parentRelative = relative.substringBeforeLast('/', "")
+        val parentVf = if (parentRelative.isBlank()) rootVf else rootVf.findFileByRelativePath(parentRelative)
+        require(parentVf != null && parentVf.isDirectory) { "Target parent directory is not a project directory." }
+        require(parentVf == rootVf || ProjectFileIndex.getInstance(project).isInContent(parentVf)) {
+            "Target parent is outside project content roots."
+        }
+        val parentDirectory =
+            PsiManager.getInstance(project).findDirectory(parentVf)
+                ?: error("Target parent is not a PSI directory.")
+        val text = request.replacement ?: error("New file content is missing.")
+        val parsed =
+            PsiFileFactory
+                .getInstance(project)
+                .createFileFromText(relative.substringAfterLast('/'), PythonFileType.INSTANCE, text) as PyFile
+        val syntaxError = PsiTreeUtil.findChildOfType(parsed, PsiErrorElement::class.java)
+        if (syntaxError != null) {
+            return Target(
+                invalid(request, ReplacementStatus.INVALID, "New Python file has invalid syntax: ${syntaxError.errorDescription}"),
+                null,
+                null,
+                fileOperationReady = true,
+            )
+        }
+        val validated =
+            ValidatedReplacement(
+                request = request,
+                status = ReplacementStatus.NEW,
+                message = "New Python file is syntactically valid and its destination is safe.",
+                newText = text,
+                newLineCount = text.lines().size,
+                unifiedDiff = UnifiedDiff.create(relative, "", text),
+            )
+        return Target(validated, null, null, file = parsed, fileParent = parentDirectory, fileOperationReady = true)
+    }
+
+    private fun validateFileDeletion(
+        request: FunctionReplacement,
+        file: PyFile,
+    ): Target {
+        val currentHash = FileContentHasher.hash(file.text)
+        val status = if (currentHash == request.originalHash) ReplacementStatus.MATCH else ReplacementStatus.CHANGED
+        val message =
+            if (status == ReplacementStatus.MATCH) {
+                "Current file exactly matches the exported file hash and can be deleted."
+            } else {
+                "The file changed after export; explicit force is required before deletion."
+            }
+        val validated =
+            ValidatedReplacement(
+                request = request,
+                status = status,
+                message = message,
+                oldText = file.text,
+                oldLineCount = file.text.lines().size,
+                unifiedDiff = UnifiedDiff.create(request.path, file.text, ""),
+                selected = status == ReplacementStatus.MATCH,
+            )
+        return Target(validated, null, null, file = file, fileOperationReady = true)
+    }
+
     private fun resolveProjectFile(
         root: Path,
         rootVf: com.intellij.openapi.vfs.VirtualFile,
@@ -137,6 +228,7 @@ class PatchValidator(
     private fun validateFunction(
         request: FunctionReplacement,
         target: PyFunction,
+        baseText: String,
     ): Target {
         val text = request.replacement ?: error("Replacement text is missing.")
         val dedented = dedent(text)
@@ -171,17 +263,19 @@ class PatchValidator(
             )
         }
         val parsed = functions.single()
-        if (parsed.name !=
-            target.name
+        val parsedName = SymbolIndexer.functionName(parsed)
+        val targetName = SymbolIndexer.functionName(target)
+        if (parsedName !=
+            targetName
         ) {
             return Target(
-                invalid(request, ReplacementStatus.INVALID, "Replacement name '${parsed.name}' does not match '${target.name}'."),
+                invalid(request, ReplacementStatus.INVALID, "Replacement name '$parsedName' does not match '$targetName'."),
                 target,
                 parsed,
             )
         }
         if (!request.allowAsyncChange &&
-            parsed.isAsync != target.isAsync
+            SymbolIndexer.isAsync(parsed) != SymbolIndexer.isAsync(target)
         ) {
             return Target(
                 invalid(request, ReplacementStatus.INVALID, "Sync/async type changed without allowAsyncChange."),
@@ -220,6 +314,7 @@ class PatchValidator(
                 target.text.lines().size,
                 parsed.text.lines().size,
                 UnifiedDiff.create(request.path, target.text, parsed.text),
+                baseText = baseText,
                 selected = status == ReplacementStatus.MATCH,
             )
         return Target(validated, target, parsed)
@@ -236,7 +331,8 @@ class PatchValidator(
         if (parsedResult.first != null) return Target(invalid(request, ReplacementStatus.INVALID, parsedResult.first!!), null, null)
         val parsed = parsedResult.second!!
         val parentName = request.parentQualifiedName.orEmpty()
-        val expectedName = if (parentName.isBlank()) parsed.name.orEmpty() else "$parentName.${parsed.name}"
+        val parsedName = SymbolIndexer.functionName(parsed).orEmpty()
+        val expectedName = if (parentName.isBlank()) parsedName else "$parentName.$parsedName"
         if (request.qualifiedName != expectedName) {
             return Target(
                 invalid(request, ReplacementStatus.INVALID, "qualifiedName must be '$expectedName' for this parent and function."),
@@ -396,6 +492,33 @@ class PatchValidator(
             val expected = project.getService(ContextPackService::class.java).repositoryFingerprint()
             require(json.get("repositoryFingerprint")?.asString == expected) { "Session belongs to a different local repository." }
         }.onFailure { errors += it.message ?: "Session validation failed." }
+    }
+
+    private fun loadExportedBaseTexts(
+        patch: CopilotPatch,
+        warnings: MutableList<String>,
+    ): Map<String, String> {
+        val stagingRoot = Path.of(System.getProperty("java.io.tmpdir"), "CopilotContextBridge")
+        if (!Files.isDirectory(stagingRoot)) return emptyMap()
+        val baseFile =
+            Files.list(stagingRoot).use { stream ->
+                stream
+                    .filter { it.fileName.toString().endsWith("_${patch.sessionId}") }
+                    .map { it.resolve(".session/base-functions.json") }
+                    .filter(Files::isRegularFile)
+                    .findFirst()
+                    .orElse(null)
+            } ?: return emptyMap()
+        return runCatching {
+            JsonParser
+                .parseString(Files.readString(baseFile))
+                .asJsonArray
+                .associate { item ->
+                    val value = item.asJsonObject
+                    "${value.get("path").asString}::${value.get("qualifiedName").asString}" to value.get("text").asString
+                }
+        }.onFailure { warnings += "Exported BASE function content could not be read; 3-way conflict diff is unavailable." }
+            .getOrDefault(emptyMap())
     }
 
     companion object {

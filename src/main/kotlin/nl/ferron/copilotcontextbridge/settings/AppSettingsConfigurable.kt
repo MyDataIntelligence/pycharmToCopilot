@@ -71,6 +71,7 @@ class AppSettingsConfigurable : Configurable {
             mandatoryFirstQuestion = question.text.trim()
             globalGuidelines = guidelines.text
             returnFileInstruction = returnInstruction.text.trim()
+            returnInstructionsByMode[CopilotReturnMode.COPILOT_PATCH_FILE.name] = returnInstruction.text.trim()
             combinedTextIntro = this@AppSettingsConfigurable.combinedTextIntro.text.trim()
             ignorePatterns = ignores.toMutableList()
             secretFilenamePatterns = secrets.toMutableList()
@@ -82,7 +83,9 @@ class AppSettingsConfigurable : Configurable {
         val state = AppSettings.getInstance().state
         question.text = state.mandatoryFirstQuestion
         guidelines.text = state.globalGuidelines
-        returnInstruction.text = state.returnFileInstruction
+        returnInstruction.text =
+            state.returnInstructionsByMode[CopilotReturnMode.COPILOT_PATCH_FILE.name]
+                ?: state.returnFileInstruction
         combinedTextIntro.text = state.combinedTextIntro
         ignorePatterns.text = state.ignorePatterns.joinToString("\n")
         secretPatterns.text = state.secretFilenamePatterns.joinToString("\n")

@@ -28,6 +28,60 @@ class CopilotPatchParserTest {
         )
     }
 
+    @Test fun `parses add file without qualified name`() {
+        val json =
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"add_file","path":"src/new.py","replacement":"VALUE = 1\n"}]}"""
+
+        val replacement = CopilotPatchParser().parseJson(json).replacements.single()
+
+        assertEquals(FILE_OPERATION_QUALIFIED_NAME, replacement.qualifiedName)
+        assertEquals("VALUE = 1\n", replacement.replacement)
+        assertEquals(null, replacement.originalHash)
+    }
+
+    @Test fun `parses delete file with exact hash and no replacement`() {
+        val json =
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"delete_file","path":"src/old.py","originalHash":"sha256:abc"}]}"""
+
+        val replacement = CopilotPatchParser().parseJson(json).replacements.single()
+
+        assertEquals(FILE_OPERATION_QUALIFIED_NAME, replacement.qualifiedName)
+        assertEquals("sha256:abc", replacement.originalHash)
+        assertEquals(null, replacement.replacement)
+    }
+
+    @Test fun `rejects delete file with replacement content`() {
+        val json =
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"delete_file","path":"src/old.py","originalHash":"sha256:abc","replacement":"bad"}]}"""
+
+        assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseJson(json) }
+    }
+
+    @Test fun `zip resolves add file content outside replacements directory`() {
+        val changes =
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"add_file","path":"src/new.py","replacementFile":"files/new.py"}]}"""
+        val bytes =
+            ByteArrayOutputStream()
+                .also { output ->
+                    ZipOutputStream(output).use { zip ->
+                        zip.putNextEntry(ZipEntry("changes.json"))
+                        zip.write(changes.toByteArray())
+                        zip.closeEntry()
+                        zip.putNextEntry(ZipEntry("files/new.py"))
+                        zip.write("VALUE = 2\n".toByteArray())
+                    }
+                }.toByteArray()
+
+        assertEquals(
+            "VALUE = 2\n",
+            CopilotPatchParser()
+                .parseZip(bytes)
+                .replacements
+                .single()
+                .replacement,
+        )
+    }
+
     @Test fun `rejects traversal zip entry`() {
         val bytes =
             ByteArrayOutputStream()

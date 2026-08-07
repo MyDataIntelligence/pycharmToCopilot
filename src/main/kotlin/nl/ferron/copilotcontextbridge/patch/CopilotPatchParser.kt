@@ -46,7 +46,7 @@ class CopilotPatchParser {
         val changes = entries["changes.json"] ?: error("ZIP must contain changes.json at its root.")
         val snippets =
             entries
-                .filterKeys { it.startsWith("replacements/") }
+                .filterKeys { it != "changes.json" }
                 .mapValues { (_, value) -> value.toString(StandardCharsets.UTF_8) }
         return parseObject(JsonParser.parseString(changes.toString(StandardCharsets.UTF_8)).asJsonObject, snippets)
     }
@@ -66,19 +66,46 @@ class CopilotPatchParser {
                 require(element.isJsonObject) { "Replacement $index must be an object." }
                 val item = element.asJsonObject
                 val operation = item.requiredString("operation")
-                require(operation in setOf("replace_function", "add_function")) { "Unsupported operation: $operation" }
+                require(operation in setOf("replace_function", "add_function", "add_file", "delete_file")) {
+                    "Unsupported operation: $operation"
+                }
                 val embedded = item.optionalString("replacement")
                 val reference = item.optionalString("replacementFile")
-                require(
-                    (embedded == null) xor (reference == null),
-                ) { "Replacement $index must contain exactly one of replacement or replacementFile." }
-                val replacementText = embedded ?: snippets[reference] ?: error("Missing ZIP snippet: $reference")
-                require(replacementText.toByteArray(StandardCharsets.UTF_8).size <= MAX_ENTRY_BYTES) { "Replacement $index is too large." }
+                val requiresContent = operation != "delete_file"
+                if (requiresContent) {
+                    require((embedded == null) xor (reference == null)) {
+                        "Replacement $index must contain exactly one of replacement or replacementFile."
+                    }
+                } else {
+                    require(embedded == null && reference == null) {
+                        "delete_file replacement $index must not contain replacement content."
+                    }
+                }
+                val replacementText =
+                    if (requiresContent) {
+                        embedded ?: snippets[reference] ?: error("Missing ZIP content: $reference")
+                    } else {
+                        null
+                    }
+                require(replacementText == null || replacementText.toByteArray(StandardCharsets.UTF_8).size <= MAX_ENTRY_BYTES) {
+                    "Replacement $index is too large."
+                }
                 FunctionReplacement(
                     operation,
                     item.requiredString("path"),
-                    item.requiredString("qualifiedName"),
-                    if (operation == "replace_function") item.requiredString("originalHash") else item.optionalString("originalHash"),
+                    if (operation.endsWith(
+                            "_file",
+                        )
+                    ) {
+                        item.optionalString("qualifiedName") ?: FILE_OPERATION_QUALIFIED_NAME
+                    } else {
+                        item.requiredString("qualifiedName")
+                    },
+                    if (operation in setOf("replace_function", "delete_file")) {
+                        item.requiredString("originalHash")
+                    } else {
+                        item.optionalString("originalHash")
+                    },
                     replacementText,
                     reference,
                     item.get("allowAsyncChange")?.asBoolean ?: false,
