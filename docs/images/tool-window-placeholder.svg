@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Copilot Context Bridge tool-window placeholder</title>
+  <desc id="desc">A neutral documented placeholder showing the plugin tabs and principal actions.</desc>
+  <rect width="1200" height="720" fill="#202124"/>
+  <rect x="36" y="32" width="1128" height="656" rx="12" fill="#2b2d30" stroke="#6b7280" stroke-width="2"/>
+  <text x="68" y="82" fill="#f3f4f6" font-family="sans-serif" font-size="28">Copilot Context Bridge</text>
+  <text x="1000" y="82" fill="#93c5fd" font-family="sans-serif" font-size="22">8 / 20 files</text>
+  <g font-family="sans-serif" font-size="18" fill="#d1d5db">
+    <text x="68" y="132">Selection</text><text x="190" y="132">Guidelines</text><text x="330" y="132">Context Preview</text><text x="505" y="132">Import Changes</text><text x="670" y="132">Prompt Skills</text><text x="810" y="132">Settings</text>
+    <text x="76" y="190" fill="#fbbf24">PINNED</text>
+    <text x="92" y="230">src/orchestrator.py — manually selected</text>
+    <text x="92" y="268">src/functions/livy.py — manually selected</text>
+    <text x="76" y="326" fill="#86efac">AUTOMATIC</text>
+    <text x="92" y="366">tests/test_livy.py — related test</text>
+    <text x="92" y="404">config/pipeline.json — referenced configuration</text>
+  </g>
+  <g fill="#3b82f6">
+    <rect x="68" y="472" width="150" height="44" rx="6"/><rect x="232" y="472" width="170" height="44" rx="6"/><rect x="416" y="472" width="178" height="44" rx="6"/>
+  </g>
+  <g font-family="sans-serif" font-size="17" fill="white">
+    <text x="91" y="500">Add files</text><text x="257" y="500">Recalculate</text><text x="437" y="500">Prepare batch</text>
+  </g>
+  <rect x="68" y="550" width="1064" height="90" rx="8" fill="#1f2937" stroke="#60a5fa" stroke-dasharray="8 6"/>
+  <text x="372" y="604" fill="#bfdbfe" font-family="sans-serif" font-size="23">Drag staged files to Microsoft 365 Copilot</text>
+</svg>

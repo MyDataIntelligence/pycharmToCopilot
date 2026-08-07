@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MyDataIntelligence/pycharmToCopilot/copilotpatch-v1.schema.json",
+  "title": "Copilot function change set",
+  "type": "object",
+  "required": ["formatVersion", "repositoryId", "sessionId", "replacements"],
+  "properties": {
+    "formatVersion": { "const": 1 },
+    "repositoryId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "summary": { "$ref": "#/$defs/summary" },
+    "replacements": { "type": "array", "minItems": 1, "maxItems": 50, "items": { "$ref": "#/$defs/change" } }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "summary": {
+      "type": "object",
+      "required": ["overview", "functions", "testsPerformed", "risks", "limitations"],
+      "properties": {
+        "overview": { "type": "string" },
+        "functions": { "type": "array" },
+        "testsPerformed": { "type": "array", "items": { "type": "string" } },
+        "risks": { "type": "array", "items": { "type": "string" } },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": ["operation", "path", "qualifiedName"],
+      "properties": {
+        "operation": { "enum": ["replace_function", "add_function"] },
+        "path": { "type": "string", "pattern": "^[^/\\\\].*\\.py$" },
+        "qualifiedName": { "type": "string", "minLength": 1 },
+        "originalHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "replacement": { "type": "string" },
+        "replacementFile": { "type": "string" },
+        "parentQualifiedName": { "type": "string" },
+        "insertAfterQualifiedName": { "type": "string" },
+        "allowAsyncChange": { "type": "boolean" },
+        "allowDecoratorKindChange": { "type": "boolean" }
+      },
+      "oneOf": [
+        { "required": ["replacement"] },
+        { "required": ["replacementFile"] }
+      ]
+    }
+  }
+}

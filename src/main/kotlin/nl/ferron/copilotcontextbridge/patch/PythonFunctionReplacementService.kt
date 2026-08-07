@@ -1,0 +1,108 @@
+package nl.ferron.copilotcontextbridge.patch
+
+import com.intellij.codeInsight.actions.OptimizeImportsProcessor
+import com.intellij.openapi.application.ApplicationInfo
+import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiFile
+import com.intellij.psi.codeStyle.CodeStyleManager
+import com.jetbrains.python.psi.PyClass
+import com.jetbrains.python.psi.PyFile
+import com.jetbrains.python.psi.PyFunction
+import nl.ferron.copilotcontextbridge.settings.ProjectSettings
+
+class PythonFunctionReplacementService(
+    private val project: Project,
+) {
+    private val logger = Logger.getInstance(PythonFunctionReplacementService::class.java)
+
+    data class ApplyResult(
+        val applied: List<String>,
+        val skipped: List<String>,
+        val failures: List<String>,
+    )
+
+    fun apply(
+        validation: PatchValidator.Result,
+        selectedNames: Set<String>,
+        forcedNames: Set<String>,
+    ): ApplyResult {
+        val applied = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
+        val failures = mutableListOf<String>()
+        val affectedFiles = linkedSetOf<PsiFile>()
+        val settings = project.getService(ProjectSettings::class.java).state
+        val eligible =
+            validation.targets.filter { target ->
+                val name = target.validated.request.qualifiedName
+                val key = "${target.validated.request.path}::$name"
+                val selected = key in selectedNames
+                val safe =
+                    target.validated.status in setOf(ReplacementStatus.MATCH, ReplacementStatus.NEW) ||
+                        (target.validated.status == ReplacementStatus.CHANGED && key in forcedNames)
+                val structurallyReady = target.parsed != null && (target.function != null || target.insertionParent != null)
+                if (!selected || !safe || !structurallyReady) {
+                    skipped += "${target.validated.request.path}:$name — ${target.validated.status}"
+                    false
+                } else {
+                    true
+                }
+            }
+
+        fun replace(target: PatchValidator.Target) {
+            try {
+                val replaced =
+                    if (target.validated.status == ReplacementStatus.NEW) {
+                        val container =
+                            when (val parent = target.insertionParent) {
+                                is PyFile -> parent
+                                is PyClass -> parent.statementList
+                                is PyFunction -> parent.statementList
+                                else -> error("Unsupported insertion parent.")
+                            }
+                        if (target.insertionAnchor !=
+                            null
+                        ) {
+                            container.addAfter(target.parsed!!, target.insertionAnchor)
+                        } else {
+                            container.add(target.parsed!!)
+                        }
+                    } else {
+                        target.function!!.replace(target.parsed!!)
+                    }
+                // PyCharm 2026.2 currently crashes its Python line-wrapping post-processor when
+                // reformat(PyFunction) is called directly after a structural PSI replacement.
+                // Keep the safe, parsed PSI replacement instead of risking a rolled-back change.
+                // Older supported IDEs can still use the native formatter.
+                if (settings.reformatReplacements && ApplicationInfo.getInstance().build.baselineVersion < 262) {
+                    CodeStyleManager.getInstance(project).reformat(replaced)
+                } else if (settings.reformatReplacements) {
+                    logger.debug("Skipped unsafe PyFunction reformat on PyCharm 2026.2 or newer")
+                }
+                replaced.containingFile?.let(affectedFiles::add)
+                applied += "${target.validated.request.path}:${target.validated.request.qualifiedName}"
+            } catch (error: Exception) {
+                failures += "${target.validated.request.path}:${target.validated.request.qualifiedName} — ${error.message}"
+            }
+        }
+        if (settings.oneUndoOperation) {
+            WriteCommandAction.writeCommandAction(project).withName("Apply Copilot function replacements").run<RuntimeException> {
+                eligible.forEach(::replace)
+                PsiDocumentManager.getInstance(project).commitAllDocuments()
+            }
+        } else {
+            eligible.forEach { target ->
+                WriteCommandAction.writeCommandAction(project).withName("Apply Copilot function replacement").run<RuntimeException> {
+                    replace(target)
+                    PsiDocumentManager.getInstance(project).commitAllDocuments()
+                }
+            }
+        }
+        if (settings.optimizeImports && failures.isEmpty()) {
+            affectedFiles.forEach { file -> OptimizeImportsProcessor(project, file).run() }
+        }
+        return ApplyResult(applied, skipped, failures)
+    }
+}
