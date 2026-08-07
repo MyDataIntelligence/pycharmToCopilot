@@ -21,10 +21,13 @@ class ContextPolicyProjectionTest : TestCase() {
 
         val projection = ContextPolicyProjection.from(policy, fallback)
 
-        assertFalse(projection.directImports)
+        assertTrue(projection.directImports)
+        assertFalse(projection.directCallees)
         assertTrue(projection.directDependents)
         assertTrue(projection.relatedTests)
-        assertTrue(projection.secondLevel)
+        assertFalse(projection.nearbyTests)
+        assertEquals(3, projection.maximumDependencyDepth)
+        assertEquals(20, projection.resolverLimits["python.transitiveImports"])
         assertFalse(projection.avoidPrevious)
         assertEquals(17, projection.maximumFiles)
     }

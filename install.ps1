@@ -15,7 +15,7 @@ try {
 $repoHash = (-join ($repoHashBytes | ForEach-Object { $_.ToString('x2') })).Substring(0, 12)
 $externalBuild = Join-Path $env:LOCALAPPDATA "CopilotContextBridge\build\$repoHash"
 
-if (Get-Process -Name 'pycharm64','pycharm' -ErrorAction SilentlyContinue) {
+if (-not $BuildOnly -and (Get-Process -Name 'pycharm64','pycharm' -ErrorAction SilentlyContinue)) {
     throw 'Close PyCharm before installing or updating Copilot Context Bridge.'
 }
 

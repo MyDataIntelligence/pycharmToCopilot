@@ -4,6 +4,7 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
+import nl.ferron.copilotcontextbridge.settings.ContextPolicyEditor
 import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
 import nl.ferron.copilotcontextbridge.settings.ContextRuleState
 import nl.ferron.copilotcontextbridge.settings.CopilotReturnMode
@@ -23,6 +24,7 @@ import javax.swing.table.AbstractTableModel
 
 /** Editable policy for the currently selected prompt library entry. */
 class ContextPolicyDialog(
+    private val promptId: String,
     private val promptName: String,
     private val policy: ContextPolicyState,
 ) : DialogWrapper(true) {
@@ -128,21 +130,12 @@ class ContextPolicyDialog(
 
     private fun duplicateSelected() {
         val row = table.selectedRow.takeIf { it >= 0 } ?: return
-        val copy = model.rules[table.convertRowIndexToModel(row)].copyOf()
-        copy.id += "-copy"
-        model.rules += copy
+        ContextPolicyEditor.duplicateRule(model.rules, table.convertRowIndexToModel(row))
         model.fireTableDataChanged()
     }
 
     private fun resetPolicy() {
-        val defaults = ContextPolicyState.defaultFor(policy.id)
-        policy.rules = defaults.rules
-        policy.target = defaults.target
-        policy.returnMode = defaults.returnMode
-        policy.previousBatchMode = defaults.previousBatchMode
-        policy.maxRepositoryFiles = defaults.maxRepositoryFiles
-        policy.maxAttachments = defaults.maxAttachments
-        policy.bundleAutomaticContext = defaults.bundleAutomaticContext
+        ContextPolicyEditor.resetToPromptDefault(policy, promptId)
         target.selectedItem = policy.target
         returnMode.selectedItem = policy.returnMode
         previous.selectedItem = policy.previousBatchMode

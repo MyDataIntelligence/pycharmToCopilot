@@ -11,3 +11,7 @@
 - Extended patch import with complete new-file and delete-file operations alongside function replacement/addition.
 - Added clone-to-install `install.ps1` workflow with atomic update and ZIP fallback.
 - Expanded automated and live PyCharm release test plans. Live results remain pending until executed.
+- Kept the More navigation in one stable scrollable row instead of letting Swing reorder wrapped tab rows.
+- Fixed independent caller, callee, nearby-test, depth and per-resolver file-limit handling in Context Policies.
+- Hardened Prompt Library editing/import validation and restored prompt-specific policy defaults correctly.
+- Allowed `install.ps1 -BuildOnly` while PyCharm is open; live installation still requires PyCharm to be closed.

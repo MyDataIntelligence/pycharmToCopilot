@@ -79,8 +79,10 @@ class ProjectSettings : PersistentStateComponent<ProjectSettings.Data> {
             linkedMapOf(
                 "PINNED" to 1000,
                 "DIRECT_IMPORT" to 800,
+                "DIRECT_CALLEE" to 775,
                 "DIRECT_DEPENDENT" to 700,
                 "RELATED_TEST" to 650,
+                "NEARBY_TEST" to 600,
                 "REFERENCED_CONFIGURATION" to 550,
                 "PACKAGE_INIT" to 450,
                 "PROJECT_CONFIGURATION" to 400,

@@ -6,6 +6,7 @@ import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.PromptSkillLibraryCodec
+import nl.ferron.copilotcontextbridge.settings.PromptSkillLibraryEditor
 import java.awt.BorderLayout
 import java.awt.GridLayout
 import java.nio.file.Files
@@ -129,9 +130,7 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
 
     private fun addSkill() {
         val id = "custom-${UUID.randomUUID().toString().take(8)}"
-        AppSettings.getInstance().state.promptSkills.add(
-            AppSettings.PromptSkillState(id, "New prompt skill", "", "Ask the user to clarify the goal, then follow this skill.", ""),
-        )
+        PromptSkillLibraryEditor.add(AppSettings.getInstance().state.promptSkills, id)
         refresh()
         list.selectedIndex = model.size - 1
     }
@@ -142,16 +141,10 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
                 .getInstance()
                 .state.promptSkills
                 .getOrNull(list.selectedIndex) ?: return
-        AppSettings.getInstance().state.promptSkills.add(
-            AppSettings.PromptSkillState(
-                "custom-${UUID.randomUUID().toString().take(8)}",
-                "${source.name} copy",
-                source.description,
-                source.prompt,
-                source.guidelines,
-                source.contextPolicy.copyOf(),
-                source.category,
-            ),
+        PromptSkillLibraryEditor.duplicate(
+            AppSettings.getInstance().state.promptSkills,
+            list.selectedIndex,
+            "custom-${UUID.randomUUID().toString().take(8)}",
         )
         refresh()
         list.selectedIndex = model.size - 1
@@ -160,7 +153,17 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
     private fun deleteSkill() {
         val skills = AppSettings.getInstance().state.promptSkills
         if (skills.size <= 1 || list.selectedIndex !in skills.indices) return
-        skills.removeAt(list.selectedIndex)
+        if (
+            com.intellij.openapi.ui.Messages.showYesNoDialog(
+                this,
+                "Delete prompt skill '${skills[list.selectedIndex].name}'?",
+                "Delete Prompt Skill",
+                null,
+            ) != com.intellij.openapi.ui.Messages.YES
+        ) {
+            return
+        }
+        PromptSkillLibraryEditor.remove(skills, list.selectedIndex)
         refresh()
     }
 
@@ -170,7 +173,7 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
                 .getInstance()
                 .state.promptSkills
                 .getOrNull(list.selectedIndex) ?: return
-        if (ContextPolicyDialog(skill.name, skill.contextPolicy).showAndGet()) refresh()
+        if (ContextPolicyDialog(skill.id, skill.name, skill.contextPolicy).showAndGet()) refresh()
     }
 
     private fun exportSkills() {

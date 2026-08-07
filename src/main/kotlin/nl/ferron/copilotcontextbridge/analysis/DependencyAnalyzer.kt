@@ -7,6 +7,7 @@ import com.intellij.psi.PsiRecursiveElementWalkingVisitor
 import com.jetbrains.python.psi.PyFile
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.context.ContextPolicyProjection
+import nl.ferron.copilotcontextbridge.context.contextResolvers
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.DependencyRelation
 import nl.ferron.copilotcontextbridge.model.RelationConfidence
@@ -109,9 +110,9 @@ class DependencyAnalyzer(
                                 DependencyRelation(
                                     entry.relativePath,
                                     targetPath,
-                                    if (insideImport) RelationType.DIRECT_IMPORT else RelationType.TEXT_REFERENCE,
+                                    if (insideImport) RelationType.DIRECT_IMPORT else RelationType.DIRECT_CALLEE,
                                     RelationConfidence.CONFIRMED,
-                                    evidence = if (insideImport) "resolved Python import" else "resolved PSI reference",
+                                    evidence = if (insideImport) "resolved Python import" else "resolved Python symbol reference",
                                 )
                         }
                         super.visitElement(element)
@@ -134,11 +135,16 @@ class DependencyAnalyzer(
                     seedPaths,
                     relations,
                     DependencyTraversal.Options(
-                        projection?.directImports ?: settings.includeDirectImports,
-                        projection?.directDependents ?: settings.includeDirectDependents,
-                        projection?.relatedTests ?: settings.includeRelatedTests,
-                        projection?.configuration ?: settings.includeReferencedConfiguration,
-                        projection?.secondLevel ?: settings.includeSecondLevelDependencies,
+                        directImports = projection?.directImports ?: settings.includeDirectImports,
+                        directCallees = projection?.directCallees ?: settings.includeDirectImports,
+                        directDependents = projection?.directDependents ?: settings.includeDirectDependents,
+                        relatedTests = projection?.relatedTests ?: settings.includeRelatedTests,
+                        nearbyTests = projection?.nearbyTests ?: false,
+                        referencedConfiguration = projection?.configuration ?: settings.includeReferencedConfiguration,
+                        maximumDepth =
+                            projection?.maximumDependencyDepth
+                                ?: if (settings.includeSecondLevelDependencies) 2 else 1,
+                        resolverLimits = projection?.resolverLimits.orEmpty(),
                     ),
                 ).toMutableMap()
         discoveryRoots.forEach { directory ->
@@ -199,9 +205,11 @@ class DependencyAnalyzer(
                     relevant.any { it.type == RelationType.SIMILAR_IMPLEMENTATION } -> RelationType.SIMILAR_IMPLEMENTATION
                     relevant.any { it.type == RelationType.INSTRUCTION } -> RelationType.INSTRUCTION
                     relevant.any { it.type == RelationType.DIRECT_IMPORT && it.from in pinned } -> RelationType.DIRECT_IMPORT
+                    relevant.any { it.type == RelationType.DIRECT_CALLEE && it.from in pinned } -> RelationType.DIRECT_CALLEE
                     relevant.any { it.type == RelationType.RELATED_TEST } -> RelationType.RELATED_TEST
+                    relevant.any { it.type == RelationType.NEARBY_TEST } -> RelationType.NEARBY_TEST
                     relevant.any { it.to in pinned } -> RelationType.DIRECT_DEPENDENT
-                    candidateDepths[relative] == 2 -> RelationType.SECOND_LEVEL
+                    (candidateDepths[relative] ?: 0) >= 2 -> RelationType.SECOND_LEVEL
                     relative.endsWith("/__init__.py") || relative == "__init__.py" -> RelationType.PACKAGE_INIT
                     relative in setOf("pyproject.toml", "setup.cfg", "tox.ini") -> RelationType.PROJECT_CONFIGURATION
                     (projection?.packageFolders ?: settings.includePackageFolders) -> RelationType.SAME_PACKAGE
@@ -264,6 +272,30 @@ class DependencyAnalyzer(
                             test.startsWith(fixture.relativePath.substringBeforeLast('/', "") + "/")
                     }.forEach { fixture -> include(test, fixture.relativePath, RelationType.TEST_FIXTURE, "test fixture for $test") }
             }
+        }
+
+        activePolicy.rules.firstOrNull { it.enabled && it.resolver == "tests.nearby" }?.let { rule ->
+            val matchingTests =
+                relations
+                    .filter { it.type == RelationType.RELATED_TEST && (it.from in seedPaths || it.to in seedPaths) }
+                    .map { relation -> if (relation.from in seedPaths) relation.to else relation.from }
+                    .filter { it.substringAfterLast('/').startsWith("test_") || "/tests/" in "/$it" }
+                    .toSet()
+            val testDirectories = matchingTests.map { it.substringBeforeLast('/', "") }.toSet()
+            snapshot.files
+                .asSequence()
+                .filter { entry ->
+                    val path = entry.relativePath
+                    path !in seedPaths &&
+                        path !in matchingTests &&
+                        path.endsWith(".py") &&
+                        (path.substringAfterLast('/').startsWith("test_") || "/tests/" in "/$path") &&
+                        path.substringBeforeLast('/', "") in testDirectories
+                }.sortedBy { it.relativePath }
+                .take(rule.maxFiles)
+                .forEach { nearby ->
+                    include(seedPaths.firstOrNull().orEmpty(), nearby.relativePath, RelationType.NEARBY_TEST, "nearby test module")
+                }
         }
 
         activePolicy.rules.firstOrNull { it.enabled && it.resolver == "repository.templates" }?.let { rule ->
@@ -365,22 +397,8 @@ class DependencyAnalyzer(
         }.getOrDefault("")
 
     private fun policyPriorityAdjustment(type: RelationType): Int {
-        val resolver =
-            when (type) {
-                RelationType.PINNED -> "explicit.pinnedFiles"
-                RelationType.RELATED_TEST -> "python.matchingTests"
-                RelationType.DIRECT_IMPORT -> "python.directImports"
-                RelationType.DIRECT_DEPENDENT -> "python.directCallers"
-                RelationType.REFERENCED_CONFIGURATION -> "text.referencedConfiguration"
-                RelationType.SECOND_LEVEL -> "python.transitiveImports"
-                RelationType.BRANCH_CHANGE -> "git.branchChanges"
-                RelationType.TEST_FIXTURE -> "tests.fixtures"
-                RelationType.TEMPLATE -> "repository.templates"
-                RelationType.SIMILAR_IMPLEMENTATION -> "repository.similarImplementations"
-                RelationType.INSTRUCTION -> "guidelines.project"
-                else -> return 0
-            }
-        return (policy?.priorityFor(resolver, 0) ?: 0) * 10
+        val activePolicy = policy ?: return 0
+        return type.contextResolvers().maxOfOrNull { activePolicy.priorityFor(it, 0) }?.times(10) ?: 0
     }
 
     private fun addTestRelations(

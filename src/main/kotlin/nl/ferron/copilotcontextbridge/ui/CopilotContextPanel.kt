@@ -14,7 +14,6 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import nl.ferron.copilotcontextbridge.ProjectRoot
@@ -111,7 +110,7 @@ class CopilotContextPanel(
             toolTipText = "Start a new Copilot conversation and reset previous-batch avoidance"
             addActionListener { startNewSession() }
         }
-    private val detailTabs = JBTabbedPane()
+    private val detailTabs = createStableDetailTabs()
     private val contextFilesPanel = ContextFilesPanel(project)
     private val returnInstructionsPanel =
         ReturnInstructionsPanel(project) {

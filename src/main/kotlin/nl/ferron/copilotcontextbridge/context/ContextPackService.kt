@@ -254,20 +254,7 @@ class ContextPackService(
         policy: nl.ferron.copilotcontextbridge.settings.ContextPolicyState,
     ): Boolean {
         val requiredResolvers = policy.rules.filter { it.enabled && it.required }.mapTo(hashSetOf()) { it.resolver }
-        return candidate.relations.any { relation ->
-            val resolver =
-                when (relation.type) {
-                    nl.ferron.copilotcontextbridge.model.RelationType.PINNED -> "explicit.pinnedFiles"
-                    nl.ferron.copilotcontextbridge.model.RelationType.RELATED_TEST -> "python.matchingTests"
-                    nl.ferron.copilotcontextbridge.model.RelationType.DIRECT_IMPORT -> "python.directImports"
-                    nl.ferron.copilotcontextbridge.model.RelationType.DIRECT_DEPENDENT -> "python.directCallers"
-                    nl.ferron.copilotcontextbridge.model.RelationType.REFERENCED_CONFIGURATION -> "text.referencedConfiguration"
-                    nl.ferron.copilotcontextbridge.model.RelationType.SECOND_LEVEL -> "python.transitiveImports"
-                    nl.ferron.copilotcontextbridge.model.RelationType.BRANCH_CHANGE -> "git.branchChanges"
-                    else -> ""
-                }
-            resolver in requiredResolvers
-        }
+        return candidate.relations.any { relation -> relation.type.contextResolvers().any { it in requiredResolvers } }
     }
 
     private fun repositoryTrees(

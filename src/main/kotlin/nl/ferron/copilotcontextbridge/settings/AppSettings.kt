@@ -122,6 +122,10 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
     companion object {
         fun getInstance(): AppSettings = ApplicationManager.getApplication().getService(AppSettings::class.java)
 
+        fun defaultPolicyForPrompt(promptId: String): ContextPolicyState =
+            defaultPromptSkills().firstOrNull { it.id == promptId }?.contextPolicy?.copyOf()
+                ?: ContextPolicyState.defaultFor(promptId)
+
         fun defaultPromptSkills(): List<PromptSkillState> =
             buildList {
                 add(
