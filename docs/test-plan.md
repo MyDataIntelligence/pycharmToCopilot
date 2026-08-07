@@ -12,7 +12,7 @@ This checklist records gates, not current results. Leave a box unchecked until c
 - [x] Patch parser/sniffer/function/file/native-diff/application/Undo tests pass.
 - [x] `buildPlugin` creates the installable ZIP and archive inspection passes.
 - [x] Plugin Verifier passes every configured PyCharm target, including 2026.2.0.1.
-- [ ] CI performs equivalent gates and uploads the same plugin artifact shape.
+- [x] CI performs equivalent Linux gates and uploads the installable plugin artifact.
 
 ## Outbound acceptance
 

@@ -25,6 +25,14 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 - The previous installed version was backed up outside the IDE plugin directory under `%LOCALAPPDATA%/CopilotContextBridge/plugin-backups/PyCharm2026.2`.
 - Exactly one installed directory contains `copilot-context-bridge-1.0.0.jar`.
 
+## GitHub Actions result
+
+- Workflow run: `31222834805` on commit `0413965c1df30ecfb92f4f00362aa30c96351ab6`.
+- Result: successful in 12 minutes and 4 seconds.
+- Successful gates: Linux tests/static checks, plugin ZIP build, Plugin Verifier and artifact upload.
+- Artifact: `copilot-context-bridge`, artifact ID `9011220531`, 612931-byte GitHub artifact archive.
+- The workflow uses an executable Unix Gradle wrapper plus `actions/checkout@v7`, `actions/setup-java@v5`, `gradle/actions/setup-gradle@v6` and `actions/upload-artifact@v7`.
+
 ## Actual PyCharm startup result
 
 PyCharm 2026.2.0.1 was launched with this repository. Its current `idea.log` records:
