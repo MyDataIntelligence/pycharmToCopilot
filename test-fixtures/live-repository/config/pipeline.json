@@ -1,0 +1,6 @@
+{
+  "type": "NotebookActivity",
+  "notebook": "child_notebook",
+  "script": "scripts/deploy.py"
+}
+
