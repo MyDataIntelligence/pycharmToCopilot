@@ -183,6 +183,9 @@ class CopilotContextPanel(
             JSplitPane(JSplitPane.HORIZONTAL_SPLIT, primaryPanel, detailsHost).apply {
                 resizeWeight = 0.43
                 dividerLocation = 500
+                // Keep the Batch workflow usable when a tool-window divider was previously
+                // dragged too far left.  The detail pane still remains resizable, but neither
+                // side is allowed to collapse into clipped labels and unusable controls.
                 dividerSize = JBUI.scale(3)
                 border = null
             }
@@ -692,6 +695,12 @@ class CopilotContextPanel(
         if (!::primaryPanel.isInitialized || !::wideSplit.isInitialized) return
         workspace.removeAll()
         if (width >= JBUI.scale(980)) {
+            val minimumPrimaryWidth = JBUI.scale(420)
+            val minimumDetailsWidth = JBUI.scale(500)
+            val maximumDividerLocation = (width - minimumDetailsWidth).coerceAtLeast(minimumPrimaryWidth)
+            if (wideSplit.dividerLocation !in minimumPrimaryWidth..maximumDividerLocation) {
+                wideSplit.dividerLocation = JBUI.scale(500).coerceIn(minimumPrimaryWidth, maximumDividerLocation)
+            }
             wideSplit.leftComponent = primaryPanel
             wideSplit.rightComponent = detailsHost
             workspace.add(wideSplit, BorderLayout.CENTER)
