@@ -13,8 +13,11 @@ import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
 import nl.ferron.copilotcontextbridge.settings.Defaults
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
 import java.nio.charset.StandardCharsets
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 
 class GuidelineService(
     private val project: Project,
@@ -60,14 +63,32 @@ class GuidelineService(
         // the guideline set.
         val ignoreMatcher = IgnoreMatcher(AppSettings.getInstance().state.ignorePatterns + settings.customIgnorePatterns)
         runCatching {
-            Files.walk(root).use { stream ->
-                stream
-                    .filter { it != root && Files.isRegularFile(it) && it.fileName.toString().equals("AGENTS.md", ignoreCase = true) }
-                    .map { root.relativize(it).joinToString("/") }
-                    .filter { !ignoreMatcher.isIgnored(it) }
-                    .sorted()
-                    .forEach { paths += it }
-            }
+            Files.walkFileTree(
+                root,
+                object : SimpleFileVisitor<Path>() {
+                    override fun preVisitDirectory(
+                        dir: Path,
+                        attrs: BasicFileAttributes,
+                    ): FileVisitResult {
+                        if (dir != root) {
+                            val relative = root.relativize(dir).joinToString("/")
+                            if (ignoreMatcher.isIgnored(relative, isDirectory = true)) return FileVisitResult.SKIP_SUBTREE
+                        }
+                        return FileVisitResult.CONTINUE
+                    }
+
+                    override fun visitFile(
+                        file: Path,
+                        attrs: BasicFileAttributes,
+                    ): FileVisitResult {
+                        if (file.fileName.toString().equals("AGENTS.md", ignoreCase = true)) {
+                            val relative = root.relativize(file).joinToString("/")
+                            if (!ignoreMatcher.isIgnored(relative)) paths += relative
+                        }
+                        return FileVisitResult.CONTINUE
+                    }
+                },
+            )
         }
         return paths.distinct().mapNotNull { relative ->
             val path = root.resolve(relative)
