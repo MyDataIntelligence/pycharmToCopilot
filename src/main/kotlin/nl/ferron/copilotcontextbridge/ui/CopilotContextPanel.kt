@@ -57,6 +57,7 @@ import javax.swing.BoxLayout
 import javax.swing.ButtonGroup
 import javax.swing.JButton
 import javax.swing.JComboBox
+import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JMenuItem
 import javax.swing.JPanel
@@ -676,9 +677,17 @@ class CopilotContextPanel(
         }
 
     private fun actionGrid(vararg components: Component) =
-        JPanel(GridLayout(0, 2, 6, 4)).apply {
+        JPanel(GridLayout(0, if (components.size >= 4) components.size else 2, 6, 4)).apply {
             border = JBUI.Borders.empty(4, 0)
-            components.forEach(::add)
+            components.forEach { component ->
+                (component as? JComponent)?.apply {
+                    minimumSize = Dimension(0, preferredSize.height)
+                    if (components.size >= 4) {
+                        font = font.deriveFont((font.size2D - 2f).coerceAtLeast(10f))
+                    }
+                }
+                add(component)
+            }
             maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
             alignmentX = LEFT_ALIGNMENT
         }
