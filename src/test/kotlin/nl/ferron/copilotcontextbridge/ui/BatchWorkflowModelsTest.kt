@@ -71,4 +71,61 @@ class BatchWorkflowModelsTest : TestCase() {
         assertTrue(items[2].toString().contains("direct import"))
         assertFalse(items.any { it.toString().contains("more") })
     }
+
+    fun testDropdownLabelsMakePinnedProvenanceExplicit() {
+        val candidate =
+            ContextCandidate(
+                relativePath = "src/functions/livy.py",
+                absolutePath = Paths.get("src/functions/livy.py"),
+                score = 1000,
+                depth = 0,
+                confidence = RelationConfidence.CONFIRMED,
+                relations =
+                    listOf(
+                        DependencyRelation(
+                            "",
+                            "src/functions/livy.py",
+                            RelationType.PINNED,
+                            RelationConfidence.CONFIRMED,
+                        ),
+                    ),
+                pinned = true,
+            )
+
+        val label = BatchFileDropdownItem(BatchFileCategory.PINNED, candidate = candidate).displayLabel()
+
+        assertTrue(label.contains("Pinned · manually selected by you"))
+        assertTrue(label.contains("src/functions/livy.py"))
+    }
+
+    fun testDropdownLabelsRetainEveryAutomaticReason() {
+        val candidate =
+            ContextCandidate(
+                relativePath = "tests/test_livy.py",
+                absolutePath = Paths.get("tests/test_livy.py"),
+                score = 650,
+                depth = 1,
+                confidence = RelationConfidence.CONFIRMED,
+                relations =
+                    listOf(
+                        DependencyRelation(
+                            "src/functions/livy.py",
+                            "tests/test_livy.py",
+                            RelationType.RELATED_TEST,
+                            RelationConfidence.CONFIRMED,
+                        ),
+                        DependencyRelation(
+                            "tests/conftest.py",
+                            "tests/test_livy.py",
+                            RelationType.TEST_FIXTURE,
+                            RelationConfidence.INFERRED,
+                        ),
+                    ),
+            )
+
+        val label = BatchFileDropdownItem(BatchFileCategory.AUTOMATIC, candidate = candidate).displayLabel()
+
+        assertTrue(label.contains("Automatic · reason: related test, test fixture"))
+        assertTrue(label.contains("tests/test_livy.py"))
+    }
 }

@@ -5,6 +5,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
+import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolver
 import nl.ferron.copilotcontextbridge.external.ExternalRepositorySelectionRegistry
@@ -15,6 +16,7 @@ import nl.ferron.copilotcontextbridge.model.sourceKey
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.state.ContextSelectionService
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.FlowLayout
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
@@ -35,9 +37,9 @@ class ContextFilesPanel(
 
     init {
         border = JBUI.Borders.empty(8)
-        tabs.addTab("Included", JBScrollPane(included))
-        tabs.addTab("Omitted", JBScrollPane(omitted))
-        tabs.addTab("Excluded", JBScrollPane(excluded))
+        tabs.addTab("Included", contextScrollPane(included))
+        tabs.addTab("Omitted", contextScrollPane(omitted))
+        tabs.addTab("Excluded", contextScrollPane(excluded))
         add(
             JBLabel("Every represented repository file and its prepared Copilot attachment.").apply {
                 foreground = JBColor.GRAY
@@ -168,25 +170,23 @@ class ContextFilesPanel(
         add(
             JPanel(BorderLayout(0, 2)).apply {
                 isOpaque = false
-                val pathLabel =
-                    JLabel(
-                        if (candidate.repositoryId.isBlank()) {
-                            candidate.relativePath
-                        } else {
-                            "${candidate.displayRepository}: ${candidate.relativePath}"
-                        },
-                    ).apply {
-                        toolTipText = text
+                val path =
+                    if (candidate.repositoryId.isBlank()) {
+                        candidate.relativePath
+                    } else {
+                        "${candidate.displayRepository}: ${candidate.relativePath}"
                     }
+                val pathLabel = wrappedText(path, rows = 3)
+                pathLabel.toolTipText = path
                 add(pathLabel, BorderLayout.NORTH)
-                add(
-                    JLabel(
-                        "<html><font color='#888888'>$detail · priority ${candidate.score} · depth ${candidate.depth}<br>" +
-                            "resolver ${candidate.resolverId.ifBlank { "n/a" }} · " +
-                            "policy ${candidate.policyRuleId.ifBlank { "n/a" }}<br>${candidate.sha256}</font></html>",
-                    ).apply { toolTipText = detail },
-                    BorderLayout.CENTER,
-                )
+                val details =
+                    "$detail · priority ${candidate.score} · depth ${candidate.depth}\n" +
+                        "resolver ${candidate.resolverId.ifBlank { "n/a" }} · " +
+                        "policy ${candidate.policyRuleId.ifBlank { "n/a" }}\n" +
+                        candidate.sha256
+                val detailsLabel = wrappedText(details, rows = 5, gray = true)
+                detailsLabel.toolTipText = detail
+                add(detailsLabel, BorderLayout.CENTER)
             },
             BorderLayout.CENTER,
         )
@@ -219,4 +219,32 @@ class ContextFilesPanel(
             ?.replace('_', ' ') ?: "repository relation"
 
     private fun rowsPanel() = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
+
+    private fun contextScrollPane(content: JPanel) =
+        JBScrollPane(content).apply {
+            horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+            verticalScrollBarPolicy = JBScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+        }
+
+    private fun wrappedText(
+        text: String,
+        rows: Int,
+        gray: Boolean = false,
+    ): JBTextArea {
+        val area = JBTextArea()
+        area.rows = rows
+        area.columns = 1
+        area.text = text
+        area.lineWrap = true
+        // Paths may not contain whitespace, so they must be allowed to break at any character.
+        area.wrapStyleWord = false
+        area.isEditable = false
+        area.isFocusable = false
+        area.isOpaque = false
+        area.border = null
+        area.font = javax.swing.UIManager.getFont("Label.font") ?: area.font
+        if (gray) area.foreground = JBColor.GRAY
+        area.maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(rows * 18 + 8))
+        return area
+    }
 }

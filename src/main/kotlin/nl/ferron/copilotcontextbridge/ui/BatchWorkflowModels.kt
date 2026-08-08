@@ -1,9 +1,13 @@
 package nl.ferron.copilotcontextbridge.ui
 
+import com.intellij.util.ui.JBUI
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.displayRepository
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.KickoffPromptTemplateRenderer
+import java.awt.Component
+import javax.swing.DefaultListCellRenderer
+import javax.swing.JList
 
 internal enum class BatchFileCategory {
     PINNED,
@@ -49,6 +53,78 @@ internal data class BatchFileDropdownItem(
                 ?.replace('_', ' ')
                 ?: "invalid pin"
         return "$path  [$reason]"
+    }
+}
+
+/**
+ * Full, two-line text used by the dropdown popup.
+ *
+ * The closed combo box still shows only the selected category.  Popup rows must make provenance
+ * explicit because a path by itself cannot tell the user whether it was selected or discovered.
+ * Every relationship is retained in the reason line; the renderer wraps long repository paths
+ * instead of replacing the middle with an ellipsis.
+ */
+internal fun BatchFileDropdownItem.displayLabel(): String {
+    if (isCategory) return toString()
+    val path =
+        candidate?.let {
+            if (it.repositoryId.isBlank()) it.relativePath else "${it.displayRepository}: ${it.relativePath}"
+        } ?: invalidPath.orEmpty()
+    if (invalidPath != null) return "$path\nPinned · invalid path (moved or deleted)"
+    val provenance =
+        if (category == BatchFileCategory.PINNED) {
+            "Pinned · manually selected by you"
+        } else {
+            val reasons =
+                if (candidate == null) {
+                    "repository relation"
+                } else {
+                    candidate.relations
+                        .map {
+                            it.type.name
+                                .lowercase()
+                                .replace('_', ' ')
+                        }.distinct()
+                        .joinToString(", ")
+                        .ifBlank { "repository relation" }
+                }
+            "Automatic · reason: $reasons"
+        }
+    return "$path\n$provenance"
+}
+
+/** Renderer for the compact dropdown; long rows wrap and remain inspectable in the popup. */
+internal class BatchFileDropdownRenderer : DefaultListCellRenderer() {
+    override fun getListCellRendererComponent(
+        list: JList<*>,
+        value: Any?,
+        index: Int,
+        isSelected: Boolean,
+        cellHasFocus: Boolean,
+    ): Component {
+        val label =
+            super.getListCellRendererComponent(
+                list,
+                value,
+                index,
+                isSelected,
+                cellHasFocus,
+            ) as javax.swing.JLabel
+        val item = value as? BatchFileDropdownItem ?: return label
+        val availableWidth =
+            (list.width - JBUI.scale(20)).coerceIn(JBUI.scale(190), JBUI.scale(440))
+        val lines = item.displayLabel().split('\n')
+        val escaped =
+            lines.joinToString("<br>") { line ->
+                line
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+            }
+        label.text = "<html><div style='width:" + availableWidth + "px'>$escaped</div></html>"
+        label.border = JBUI.Borders.empty(4, 7)
+        label.toolTipText = "<html>$escaped</html>"
+        return label
     }
 }
 

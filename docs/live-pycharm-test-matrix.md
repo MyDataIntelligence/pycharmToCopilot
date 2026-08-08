@@ -99,7 +99,7 @@ Rules:
 | L062 | Duplicate basenames | Stable staged names are unique; originals remain unchanged | PENDING | `docs/screenshots/live-audit/L062-duplicate-basename-mapping.png` |
 | L063 | Unsupported text extension | Safe `.txt` staged representation preserves original mapping | PENDING | `docs/screenshots/live-audit/L063-text-extension-conversion.png` |
 | L064 | Unsaved editor document | Staged content and hash reflect current editor text | PENDING | `docs/screenshots/live-audit/L064-unsaved-document.png` |
-| L065 | Preview top-level tab | Exact context text and Included/Omitted/Excluded file views remain readable | PASS | `docs/screenshots/live-audit/L151-preview-tab.png` |
+| L065 | Preview top-level tab | Exact context text and Included/Omitted/Excluded file views remain readable | PASS | `docs/screenshots/live-audit/L151-preview-tab.png`, `L212-preview-wrapped-context-files.png` |
 | L066 | Copy context only | Clipboard contains generated Markdown without source-body concatenation | PENDING | `docs/screenshots/live-audit/L066-copy-context-only.png` |
 | L067 | Copy as text | Clipboard contains metadata, original paths and explicit full file boundaries | PENDING | `docs/screenshots/live-audit/L067-copy-combined-text.png` |
 | L068 | Copy files | Clipboard exposes exact staged OS file list | PENDING | `docs/screenshots/live-audit/L068-copy-file-list.png` |
@@ -134,7 +134,7 @@ Rules:
 | L087 | New conversation session | Session ID changes; new batch starts at one; history remains inspectable | PASS | `docs/screenshots/live-audit/L168-new-session-confirmed.png`, `L169-session-selector.png` |
 | L088 | Current-session prior batches | Generated prompt lists current-session batches and possible future 20-file batches | PENDING | `docs/screenshots/live-audit/L088-multibatch-protocol.png` |
 | L089 | More → Batch history/session selector | Existing session with five batches can be selected and restored | PASS | `docs/screenshots/live-audit/L169-session-selector.png`, `L171-session-switched-old.png` |
-| L090 | More → Context preview and back | Preview opens, Back/Batch returns without layout jump in the wide split layout | PASS | `docs/screenshots/live-audit/L141-context-preview-retained.png`, `L090-more-context-navigation.png` |
+| L090 | More → Context preview and back | Preview opens, Back/Batch returns without layout jump in the wide split layout | PASS | `docs/screenshots/live-audit/L141-context-preview-retained.png`, `L209-current.png`, `L210-batch-return.png`, `L090-more-context-navigation.png` |
 | L091 | More → Guidelines and back | Correct page opens; Import controls never appear there | PASS | `docs/screenshots/live-audit/L091-more-guidelines-navigation.png` |
 | L092 | More → Prompt Library and back | Editor opens with stable button placement and scroll state | PASS | `docs/screenshots/live-audit/L092-more-prompt-navigation.png` |
 | L093 | More → Settings | Correct plugin settings page opens | PASS | `docs/screenshots/live-audit/L093-more-settings.png` |

@@ -95,7 +95,12 @@ class CopilotContextPanel(
         }
 
     /** Compact selector: the closed value is the category; the popup contains every file in that category. */
-    private val batchFileCategory = JComboBox<BatchFileDropdownItem>()
+    private val batchFileCategory =
+        JComboBox<BatchFileDropdownItem>().apply {
+            renderer = BatchFileDropdownRenderer()
+            // Keep the page compact while making the popup itself scrollable for large packs.
+            maximumRowCount = 12
+        }
     private val batchFiles = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
     private val preview = JBTextArea().apply { isEditable = false }
     private val historyText = JBTextArea().apply { isEditable = false }
