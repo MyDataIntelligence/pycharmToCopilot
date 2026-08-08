@@ -168,18 +168,18 @@ Rules:
 | L111 | Conflict Use Copilot/Force Replace | Explicit decision selects conflict and remains visible before apply | PENDING | `docs/screenshots/live-audit/L111-conflict-use-copilot.png` |
 | L112 | Add top-level function diff | Entire new function appears as addition at validated anchor | PENDING | `docs/screenshots/live-audit/L112-add-top-level-function.png` |
 | L113 | Add class/nested/decorated/async function | Parent, anchor and function kind validate unambiguously | PENDING | `docs/screenshots/live-audit/L113-add-complex-function.png` |
-| L114 | Add-file diff | Complete new file appears as added and existing path cannot be overwritten | PENDING | `docs/screenshots/live-audit/L114-add-file-diff.png` |
-| L115 | Delete-file diff | Complete existing file appears as removed with exported-hash protection | PENDING | `docs/screenshots/live-audit/L115-delete-file-diff.png` |
+| L114 | Add-file diff | Complete new file appears as added and existing path cannot be overwritten | PASS | `docs/screenshots/live-audit/L155-native-diff.png` |
+| L115 | Delete-file diff | Complete existing file appears as removed with exported-hash protection | PASS | `docs/screenshots/live-audit/L176-delete-warning-wrapped.png`, `L160-delete-confirmation-2.png` |
 | L116 | Switch individual diffs | Diff updates to chosen operation without losing selections/decisions | PENDING | `docs/screenshots/live-audit/L116-switch-diffs.png` |
 | L117 | Combined diff | Every validated selected operation appears once in stable order | PENDING | `docs/screenshots/live-audit/L117-combined-diff.png` |
 | L118 | Select all / Select safe / Deselect conflicts / Clear | Each bulk action affects exactly eligible operations | PENDING | `docs/screenshots/live-audit/L118-bulk-selection.png` |
-| L119 | Apply confirmation | Dialog summarises selected safe/conflict/file operations before write | PENDING | `docs/screenshots/live-audit/L119-apply-confirmation.png` |
+| L119 | Apply confirmation | Dialog summarises selected safe/conflict/file operations before write | PASS | `docs/screenshots/live-audit/L156-import-confirmation.png` |
 | L120 | Revalidation just before apply | Changed local state refreshes review and blocks stale apply | PENDING | `docs/screenshots/live-audit/L120-preapply-revalidation.png` |
 | L121 | Apply multiple functions/files | Only selected operations across files run in one Undo command | PENDING | `docs/screenshots/live-audit/L121-apply-multiple-operations.png` |
 | L122 | Preserve unrelated code/encoding | Neighbour functions, surrounding text and encoding remain unchanged | PENDING | `docs/screenshots/live-audit/L122-preserve-unrelated-code.png` |
 | L123 | Undo apply | One Undo restores replacements, additions and deletions | PENDING | `docs/screenshots/live-audit/L123-undo-apply.png` |
 | L124 | Optional reformat/optimise imports | Only enabled post-processing runs and result is reported honestly | PENDING | `docs/screenshots/live-audit/L124-post-processing.png` |
-| L125 | Post-apply validation/report | Applied/skipped files and actually run validations are listed | PENDING | `docs/screenshots/live-audit/L125-post-apply-report.png` |
+| L125 | Post-apply validation/report | Applied/skipped files and actually run validations are listed | PASS | `docs/screenshots/live-audit/L157-after-apply.png` |
 
 ## External Microsoft 365 Copilot handoff
 
