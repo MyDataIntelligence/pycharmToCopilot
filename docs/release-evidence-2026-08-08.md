@@ -7,9 +7,9 @@ This record separates verified automated/install evidence from the still-pending
 - Gradle: 9.5.0.
 - Kotlin: 2.1.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
-- Command: `.\gradlew.bat ktlintFormat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release15 --no-daemon`.
-- Result: `BUILD SUCCESSFUL`; 204 tests, 0 failures, 0 errors and 0 skipped tests.
-- The same final-audit command rebuilt the ZIP and ran the verifier. A fresh rerun on the current source (`build-final-release15`) passed all 204 tests again and verified the Chosen/Pinned context-files view.
+- Command: `.\gradlew.bat ktlintFormat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release16 --no-daemon`.
+- Result: `BUILD SUCCESSFUL`; 210 tests, 0 failures, 0 errors and 0 skipped tests.
+- The same final-audit command rebuilt the ZIP and ran the verifier. A fresh rerun on the current source (`build-final-release16`) passed all 210 tests again, including external extension exclusions, previous-batch filtering and the Chosen/Pinned context-files view.
 - Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
 
 The Gradle launcher itself used the locally installed JDK 17. Gradle selected the configured JDK 21 toolchain for plugin compilation.
@@ -17,13 +17,13 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 ## ZIP and installer result
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
-- Current release15 ZIP produced by `buildPlugin`: 819367 bytes, SHA-256 `2C7C48C890B7AD8D9CE616D5F7828E771E556749BEA9420256597ED6EAAD8AC4`.
-- Final verification ZIP: `build-final-release15/distributions/copilot-context-bridge-1.0.0.zip`.
-- Final verification size: 819367 bytes.
-- Final verification SHA-256: `2C7C48C890B7AD8D9CE616D5F7828E771E556749BEA9420256597ED6EAAD8AC4`.
+- Current release16 ZIP produced by `buildPlugin`: 822840 bytes, SHA-256 `DD8E5BEC296B3343A00903A2242E16376DC3560EC6C99ED874B571F5C41BA40D`.
+- Final verification ZIP: `build-final-release16/distributions/copilot-context-bridge-1.0.0.zip`.
+- Final verification size: 822840 bytes.
+- Final verification SHA-256: `DD8E5BEC296B3343A00903A2242E16376DC3560EC6C99ED874B571F5C41BA40D`.
 - The ZIP includes the compact Batch dropdown renderer, wrapped Context Files details and their regression tests.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
-- `install.ps1 -BuildOnly` was verified for the prior release source; run the same command after closing PyCharm to install this release15 ZIP atomically.
+- `install.ps1 -BuildOnly` was run against release16 successfully while PyCharm remained open; it produced the same 822840-byte ZIP and copied it to `build/distributions`.
 - The installer now runs `clean buildPlugin` in its isolated build directory before packaging, preventing stale Kotlin classes from leaking into a later install.
 - A previous full `install.ps1` run completed successfully and atomically installed the preceding verified build to `%APPDATA%/JetBrains/PyCharm2026.2/plugins/copilot-context-bridge`; PyCharm was open during this final source-only release15 gate, so no overwrite was attempted.
 - The previous installed version was backed up outside the IDE plugin directory under `%LOCALAPPDATA%/CopilotContextBridge/plugin-backups/PyCharm2026.2`.

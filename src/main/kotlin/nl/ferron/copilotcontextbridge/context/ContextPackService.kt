@@ -68,6 +68,7 @@ class ContextPackService(
                 settings.customIgnorePatterns,
                 (app.state.secretFilenamePatterns + settings.projectSecretFilenamePatterns).distinct(),
                 settings.textualScanLimitBytes,
+                app.state.excludedContextExtensions,
             )
         val externalCandidates =
             externalRegistry
@@ -104,21 +105,23 @@ class ContextPackService(
                     pinned + archive + analyzedDiscovery
                 }.distinctBy { it.sourceKey }
         val allCandidates =
-            (analysis.candidates + externalCandidates).map { candidate ->
-                if (candidate.resolverId.isNotBlank() && candidate.policyRuleId.isNotBlank()) {
-                    candidate
-                } else {
-                    val primaryRule = ContextResolverRegistry.primaryRule(candidate, policy)
-                    candidate.copy(
-                        resolverId =
-                            candidate.resolverId.ifBlank {
-                                primaryRule?.resolver
-                                    ?: ContextResolverRegistry.primaryResolver(candidate, policy)
-                            },
-                        policyRuleId = candidate.policyRuleId.ifBlank { primaryRule?.id.orEmpty() },
-                    )
+            PreviousBatchFilter
+                .markIgnored(analysis.candidates + externalCandidates, projection.avoidPrevious)
+                .map { candidate ->
+                    if (candidate.resolverId.isNotBlank() && candidate.policyRuleId.isNotBlank()) {
+                        candidate
+                    } else {
+                        val primaryRule = ContextResolverRegistry.primaryRule(candidate, policy)
+                        candidate.copy(
+                            resolverId =
+                                candidate.resolverId.ifBlank {
+                                    primaryRule?.resolver
+                                        ?: ContextResolverRegistry.primaryResolver(candidate, policy)
+                                },
+                            policyRuleId = candidate.policyRuleId.ifBlank { primaryRule?.id.orEmpty() },
+                        )
+                    }
                 }
-            }
         val effectiveCandidates =
             allCandidates
                 .filter { candidate ->

@@ -26,6 +26,7 @@ class ExternalRepositoryDropResolver(
     private val customIgnorePatterns: Collection<String> = emptyList(),
     private val secretFilenamePatterns: Collection<String>,
     private val textualScanLimitBytes: Long = 2L * 1024 * 1024,
+    excludedContextExtensions: Collection<String> = emptyList(),
 ) {
     data class Repository(
         val id: String,
@@ -62,6 +63,11 @@ class ExternalRepositoryDropResolver(
 
     private val currentRoot = currentRepositoryRoot.toRealPath()
     private val secretDetector = SecretDetector(secretFilenamePatterns)
+    private val excludedExtensions =
+        excludedContextExtensions
+            .map { it.removePrefix(".").trim().lowercase() }
+            .filter(String::isNotBlank)
+            .toSet()
 
     fun resolve(
         suppliedPaths: Collection<Path>,
@@ -173,6 +179,7 @@ class ExternalRepositoryDropResolver(
                         customIgnorePatterns,
                         secretFilenamePatterns = secretFilenamePatterns,
                         maximumEntryBytes = textualScanLimitBytes.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                        excludedContextExtensions = excludedExtensions,
                     ).extract(real)
                 val sources =
                     archive.entries.map { entry ->
@@ -190,6 +197,7 @@ class ExternalRepositoryDropResolver(
                 ResolvedSource(listOf(RawSource(repositoryRoot, relative, real, Kind.DISCOVERY_DIRECTORY, null)))
             } else {
                 require(TextFileSupport.isLikelyText(real)) { "Only text-based repository files can be added to Copilot context." }
+                require(!isExcludedExtension(relative)) { "File extension is excluded from Copilot context by plugin settings." }
                 val warning = inspectSecret(real, relative)
                 ResolvedSource(listOf(RawSource(repositoryRoot, relative, real, Kind.PINNED_FILE, warning)))
             }
@@ -273,6 +281,9 @@ class ExternalRepositoryDropResolver(
 
     private fun sanitizeRepositoryName(value: String): String =
         value.replace(Regex("[^A-Za-z0-9._-]"), "-").trim('-').ifBlank { "repository" }
+
+    private fun isExcludedExtension(relativePath: String): Boolean =
+        relativePath.substringAfterLast('.', "").lowercase() in excludedExtensions
 
     private fun shortHash(value: String): String =
         MessageDigest

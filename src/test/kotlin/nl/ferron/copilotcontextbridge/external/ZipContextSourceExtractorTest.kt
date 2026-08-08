@@ -52,6 +52,29 @@ class ZipContextSourceExtractorTest : TestCase() {
         assertTrue(runCatching { extractor.extract(duplicate) }.exceptionOrNull()!!.message!!.contains("case-ambiguous"))
     }
 
+    fun testConfiguredContextExtensionIsExcludedFromArchiveEntries() {
+        val archive = root.resolve("extension-filter.zip")
+        Files.write(
+            archive,
+            zipOf(
+                "src/main.py" to "print('safe')\n".toByteArray(),
+                "docs/manual.pdf" to "plain text but excluded by policy\n".toByteArray(),
+            ),
+        )
+
+        val result =
+            ZipContextSourceExtractor(
+                Defaults.ignorePatterns,
+                emptyList(),
+                Defaults.secretPatterns,
+                root.resolve("cache"),
+                excludedContextExtensions = listOf("pdf"),
+            ).extract(archive)
+
+        assertEquals(listOf("src/main.py"), result.entries.map { it.archivePath })
+        assertEquals("file extension excluded by plugin settings", result.excluded.single().reason)
+    }
+
     private fun zipOf(vararg entries: Pair<String, ByteArray>): ByteArray =
         ByteArrayOutputStream()
             .also { output ->

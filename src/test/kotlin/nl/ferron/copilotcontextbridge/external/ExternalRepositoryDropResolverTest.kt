@@ -81,6 +81,30 @@ class ExternalRepositoryDropResolverTest : TestCase() {
         assertTrue(confirmed.confirmationRequired.isEmpty())
     }
 
+    fun testConfiguredContextExtensionIsRejectedForExternalFileAndDiscovery() {
+        val current = repository("current-extension-filter")
+        val external = repository("external-extension-filter")
+        val markdown = write(external, "docs/guide.md", "# safe\n")
+        val archiveLikeText = write(external, "docs/manual.pdf", "plain text that is intentionally excluded\n")
+        val docsDirectory = external.resolve("docs")
+        val resolver = resolver(current, excludedExtensions = listOf(".pdf"))
+
+        val direct = resolver.resolve(listOf(markdown, archiveLikeText))
+
+        assertEquals(listOf("docs/guide.md"), direct.accepted.map { it.relativePath })
+        assertEquals(1, direct.rejected.size)
+        assertTrue(
+            direct.rejected
+                .single()
+                .reason
+                .contains("extension is excluded"),
+        )
+
+        val discovered = resolver.discoverFiles(resolver.resolve(listOf(docsDirectory)).accepted.single())
+        assertEquals(listOf("docs/guide.md"), discovered.accepted.map { it.relativePath })
+        assertTrue(discovered.rejected.any { it.reason.contains("extension is excluded") })
+    }
+
     fun testExternalNonGitPathIsRejectedButCurrentProjectPathIsAccepted() {
         val current = Files.createDirectories(temporaryRoot.resolve("plain-current"))
         val currentFile = write(current, "src/current.py", "print('current')")
@@ -165,7 +189,14 @@ class ExternalRepositoryDropResolverTest : TestCase() {
     private fun resolver(
         current: Path,
         custom: List<String> = emptyList(),
-    ) = ExternalRepositoryDropResolver(current, Defaults.ignorePatterns, custom, Defaults.secretPatterns)
+        excludedExtensions: List<String> = emptyList(),
+    ) = ExternalRepositoryDropResolver(
+        current,
+        Defaults.ignorePatterns,
+        custom,
+        Defaults.secretPatterns,
+        excludedContextExtensions = excludedExtensions,
+    )
 
     private fun repository(name: String): Path = repositoryAt(temporaryRoot.resolve(name))
 

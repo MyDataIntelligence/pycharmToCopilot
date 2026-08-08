@@ -3,6 +3,7 @@ package nl.ferron.copilotcontextbridge.ui
 import junit.framework.TestCase
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.DependencyRelation
+import nl.ferron.copilotcontextbridge.model.RankedSelection
 import nl.ferron.copilotcontextbridge.model.RelationConfidence
 import nl.ferron.copilotcontextbridge.model.RelationType
 import nl.ferron.copilotcontextbridge.settings.AppSettings
@@ -128,4 +129,38 @@ class BatchWorkflowModelsTest : TestCase() {
         assertTrue(label.contains("Automatic · reason: related test, test fixture"))
         assertTrue(label.contains("tests/test_livy.py"))
     }
+
+    fun testPinnedDisplayRetainsPinnedCandidatesOmittedByCapacity() {
+        val included = candidate("src/first.py", pinned = true)
+        val omittedPinned = candidate("src/second.py", pinned = true)
+        val omittedAutomatic = candidate("src/dependency.py", pinned = false)
+
+        val visible =
+            BatchFileCategoryModel.pinnedCandidatesForDisplay(
+                RankedSelection(
+                    included = listOf(included),
+                    omitted = listOf(omittedPinned, omittedAutomatic),
+                    validationErrors = listOf("too many pinned files"),
+                    warnings = emptyList(),
+                ),
+            )
+
+        assertEquals(listOf("src/first.py", "src/second.py"), visible.map { it.relativePath })
+    }
+
+    private fun candidate(
+        path: String,
+        pinned: Boolean,
+    ) = ContextCandidate(
+        relativePath = path,
+        absolutePath = Paths.get(path),
+        score = if (pinned) 1_000 else 100,
+        depth = if (pinned) 0 else 1,
+        confidence = RelationConfidence.CONFIRMED,
+        relations =
+            listOf(
+                DependencyRelation("", path, if (pinned) RelationType.PINNED else RelationType.DIRECT_IMPORT, RelationConfidence.CONFIRMED),
+            ),
+        pinned = pinned,
+    )
 }

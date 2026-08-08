@@ -2,7 +2,9 @@ package nl.ferron.copilotcontextbridge.ui
 
 import com.intellij.util.ui.JBUI
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
+import nl.ferron.copilotcontextbridge.model.RankedSelection
 import nl.ferron.copilotcontextbridge.model.displayRepository
+import nl.ferron.copilotcontextbridge.model.sourceKey
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.KickoffPromptTemplateRenderer
 import java.awt.Component
@@ -129,6 +131,16 @@ internal class BatchFileDropdownRenderer : DefaultListCellRenderer() {
 }
 
 internal object BatchFileCategoryModel {
+    /**
+     * Returns every manually pinned candidate, including a candidate that could not be packed
+     * because the user pinned more files than the current policy permits.  Such candidates must
+     * remain visible in the Batch view so the validation error cannot look like a silent removal.
+     */
+    fun pinnedCandidatesForDisplay(selection: RankedSelection): List<ContextCandidate> =
+        (selection.included + selection.omitted + selection.excluded)
+            .filter { it.pinned }
+            .distinctBy { it.sourceKey }
+
     fun choices(
         pinnedCount: Int,
         automaticCount: Int,

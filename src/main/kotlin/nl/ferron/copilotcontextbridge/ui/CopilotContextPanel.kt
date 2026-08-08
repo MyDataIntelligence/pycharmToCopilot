@@ -78,15 +78,6 @@ class CopilotContextPanel(
     private val selectionService = project.getService(ContextSelectionService::class.java)
     private val projectSettings = project.getService(ProjectSettings::class.java)
     private val externalRegistry = project.getService(ExternalRepositorySelectionRegistry::class.java)
-    private val externalResolver =
-        ExternalRepositoryDropResolver(
-            ProjectRoot.path(project),
-            AppSettings.getInstance().state.ignorePatterns,
-            projectSettings.state.customIgnorePatterns,
-            AppSettings.getInstance().state.secretFilenamePatterns + projectSettings.state.projectSecretFilenamePatterns,
-            projectSettings.state.textualScanLimitBytes,
-        )
-
     private val count = JLabel("0 repository files • 0 / 20 attachments")
     private val status = JLabel("Select files to begin")
     private val capacity =
@@ -403,7 +394,7 @@ class CopilotContextPanel(
             maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(34))
             transferHandler =
                 ExplorerRepositoryDropHandler(
-                    resolver = externalResolver::resolve,
+                    resolver = { paths -> externalResolver().resolve(paths) },
                     resultConsumer = ::acceptRepositoryDrop,
                     errorConsumer = { message ->
                         UiSupport.notify(project, "Repository drop failed", message, NotificationType.ERROR)
@@ -792,7 +783,7 @@ class CopilotContextPanel(
         if (regularSelection.isNotEmpty()) selectionService.addSelection(regularSelection)
         if (archives.isEmpty()) return
         AppExecutorUtil.getAppExecutorService().execute {
-            runCatching { externalResolver.resolve(archives.map { Path.of(it.path) }) }
+            runCatching { externalResolver().resolve(archives.map { Path.of(it.path) }) }
                 .onSuccess { result -> ApplicationManager.getApplication().invokeLater { acceptRepositoryDrop(result) } }
                 .onFailure { error ->
                     ApplicationManager.getApplication().invokeLater {
@@ -808,6 +799,17 @@ class CopilotContextPanel(
     }
 
     private fun skillLabel(skill: AppSettings.PromptSkillState): String = "${skill.category.ifBlank { "Custom" }}  ·  ${skill.name}"
+
+    /** Build from current application and project settings so exclusion edits apply immediately. */
+    private fun externalResolver(): ExternalRepositoryDropResolver =
+        ExternalRepositoryDropResolver(
+            ProjectRoot.path(project),
+            AppSettings.getInstance().state.ignorePatterns,
+            projectSettings.state.customIgnorePatterns,
+            AppSettings.getInstance().state.secretFilenamePatterns + projectSettings.state.projectSecretFilenamePatterns,
+            projectSettings.state.textualScanLimitBytes,
+            AppSettings.getInstance().state.excludedContextExtensions,
+        )
 
     private fun recalculate() {
         if (!preparing) recalculationTimer.restart()
@@ -875,7 +877,10 @@ class CopilotContextPanel(
                 )}"
                 else -> "Safe selection ready • ${formatBytes(result.estimatedBytes)}"
             }
-        pinnedCandidates = result.selection.included.filter { it.pinned }
+        // Keep over-limit pinned candidates visible in the Batch view.  They are present in the
+        // omitted list with a validation error, but hiding them here would make a user believe
+        // that Bridge silently removed an explicit selection.
+        pinnedCandidates = BatchFileCategoryModel.pinnedCandidatesForDisplay(result.selection)
         automaticCandidates = result.selection.included.filterNot { it.pinned }
         refreshBatchFileCategories()
         contextFilesPanel.show(result)
@@ -1402,7 +1407,10 @@ class CopilotContextPanel(
     private fun refreshHistory() {
         refreshSessions()
         val selected = selectedBatchId()
-        val batches = selectionService.batches().asReversed()
+        // History controls operate on the selected conversation only.  Showing batches from a
+        // different session here made the session switch appear ineffective and allowed Restore
+        // to pull an old conversation's files into the current draft.
+        val batches = selectionService.currentSessionBatches().asReversed()
         refreshingHistory = true
         try {
             batchCombo.removeAllItems()
@@ -1441,7 +1449,7 @@ class CopilotContextPanel(
 
     private fun showSelectedBatchDetails() {
         val selectedId = selectedBatchId()
-        val selected = selectionService.batches().firstOrNull { it.sessionId == selectedId }
+        val selected = selectionService.currentSessionBatches().firstOrNull { it.sessionId == selectedId }
         historyText.text =
             buildString {
                 if (selected == null) {

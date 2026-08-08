@@ -22,6 +22,7 @@ class ZipContextSourceExtractor(
     secretFilenamePatterns: Collection<String>,
     private val cacheRoot: Path = Path.of(System.getProperty("java.io.tmpdir"), "CopilotContextBridgeArchiveSources"),
     private val maximumEntryBytes: Int = MAX_ENTRY_BYTES,
+    excludedContextExtensions: Collection<String> = emptyList(),
 ) {
     data class Entry(
         val archivePath: String,
@@ -43,6 +44,11 @@ class ZipContextSourceExtractor(
     )
 
     private val secretDetector = SecretDetector(secretFilenamePatterns)
+    private val excludedExtensions =
+        excludedContextExtensions
+            .map { it.removePrefix(".").trim().lowercase() }
+            .filter(String::isNotBlank)
+            .toSet()
 
     fun extract(archive: Path): Result {
         require(Files.isRegularFile(archive) && !Files.isSymbolicLink(archive)) { "ZIP source must be a regular file." }
@@ -93,6 +99,7 @@ class ZipContextSourceExtractor(
             val reason =
                 when {
                     ignoreMatcher.isIgnored(path) -> "ignored by repository or plugin rules"
+                    isExcludedExtension(path) -> "file extension excluded by plugin settings"
                     text == null || !TextFileSupport.isLikelyText(content) -> "binary or non-UTF-8 content"
                     secretDetector.suspiciousFilename(path) -> "suspicious secret filename"
                     secretDetector.scanText(text).isNotEmpty() -> "secret-like content"
@@ -159,6 +166,8 @@ class ZipContextSourceExtractor(
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     private fun sanitize(value: String): String = value.replace(Regex("[^A-Za-z0-9._-]"), "-").trim('-').ifBlank { "archive" }
+
+    private fun isExcludedExtension(path: String): Boolean = path.substringAfterLast('.', "").lowercase() in excludedExtensions
 
     companion object {
         const val MAX_COMPRESSED_BYTES = 20L * 1024 * 1024
