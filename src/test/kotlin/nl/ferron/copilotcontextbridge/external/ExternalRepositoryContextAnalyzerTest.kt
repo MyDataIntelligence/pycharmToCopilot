@@ -99,6 +99,28 @@ class ExternalRepositoryContextAnalyzerTest : TestCase() {
         }
     }
 
+    fun testExternalPolicyDetectsDirectCallersOfSelectedPythonFiles() {
+        val root = Files.createTempDirectory("external-context-callers")
+        try {
+            val seed = candidate(root, "src/service.py", "def run(): pass\n")
+            val caller = candidate(root, "src/orchestrator.py", "from src.service import run\n")
+            val policy =
+                ContextPolicyState.defaultFor("external-callers").apply {
+                    rule("direct-callers")!!.enabled = true
+                }
+
+            val analyzed = ExternalRepositoryContextAnalyzer(policy, 100_000).analyze(listOf(seed), listOf(caller))
+
+            assertTrue(
+                analyzed.single().relations.any {
+                    it.type == RelationType.DIRECT_DEPENDENT && it.from == "src/orchestrator.py" && it.to == "src/service.py"
+                },
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     private fun candidate(
         root: Path,
         relative: String,

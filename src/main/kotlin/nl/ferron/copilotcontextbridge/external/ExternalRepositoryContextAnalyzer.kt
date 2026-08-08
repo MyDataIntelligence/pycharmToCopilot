@@ -26,6 +26,7 @@ class ExternalRepositoryContextAnalyzer(
         val allTexts = allSources.associateWith(::readText)
         return discovered.map { candidate ->
             val relations = mutableListOf<DependencyRelation>()
+            val candidateText = allTexts[candidate]
             if (policy.isEnabled("python.matchingTests") && isTest(candidate.relativePath)) {
                 seeds
                     .filter { it.relativePath.endsWith(".py") && TestFileMatcher.matches(candidate.relativePath, it.relativePath) }
@@ -41,6 +42,22 @@ class ExternalRepositoryContextAnalyzer(
                         relations += relation(seed, candidate, RelationType.DIRECT_IMPORT, "external repository local Python import")
                     }
                 }
+            }
+            if (policy.isEnabled("python.directCallers") && candidate.relativePath.endsWith(".py", true)) {
+                seedTexts.keys
+                    .filter { it.relativePath.endsWith(".py", true) }
+                    .forEach { seed ->
+                        val seedModules = moduleNames(seed.relativePath)
+                        if (importsAny(candidateText.orEmpty(), seedModules)) {
+                            relations +=
+                                relation(
+                                    candidate,
+                                    seed,
+                                    RelationType.DIRECT_DEPENDENT,
+                                    "external repository Python caller imports selected module",
+                                )
+                        }
+                    }
             }
             if (policy.isEnabled("text.referencedConfiguration") && isConfiguration(candidate.relativePath)) {
                 allTexts.filterValues { it != null }.forEach { (seed, text) ->
