@@ -122,7 +122,7 @@ Rules:
 | L080 | Edit project override/prompt addition | Effective instructions update and persist | PENDING | `docs/screenshots/live-audit/L080-return-instructions-inheritance.png` |
 | L081 | Remove required return clause | Validation warning identifies missing identity/safety requirement | PENDING | `docs/screenshots/live-audit/L081-return-instructions-validation.png` |
 | L082 | Reset Return Instructions | Selected mode returns to safe default while other modes remain intact | PENDING | `docs/screenshots/live-audit/L082-return-instructions-reset.png` |
-| L083 | More quick Copy return instructions | Clipboard exactly equals effective preview | PENDING | `docs/screenshots/live-audit/L083-copy-return-instructions.png` |
+| L083 | Batch Copy return text | Clipboard contains the effective return-format instructions only | PASS | `docs/screenshots/live-audit/L180-copy-return-clicked.png` |
 
 ## Batches, sessions and More page
 
@@ -209,7 +209,7 @@ Rules:
 | L137 | Open Automatic dropdown with more than 20 repository files | All automatic files remain inspectable with reason tags while attachment count stays at or below 20 | PASS | `docs/screenshots/live-audit/L166-automatic-dropdown-open.png` |
 | L138 | Prepare dropdown batch | Packing summary reports physical attachments, represented files and category bundle counts | PASS | `docs/screenshots/live-audit/L148-after-prepare-correct-coordinates.png` |
 | L139 | Inspect prompt below prepared drag zone | Rendered prompt includes context index, skill, session, batch, original paths, Return Instructions and future-batch wait text | PASS | `docs/screenshots/live-audit/L148-after-prepare-correct-coordinates.png` |
-| L140 | Copy editable kickoff prompt | Clipboard exactly matches the visible rendered prompt and no file contents are mixed in | PENDING | `docs/screenshots/live-audit/L140-copy-kickoff-prompt.png` |
+| L140 | Copy editable kickoff prompt | Clipboard exactly matches the visible rendered prompt and no file contents are mixed in | PASS | `docs/screenshots/live-audit/L179-copy-prompt-clicked.png` |
 | L141 | Open More → Context preview after Batch redesign | Complete generated context, source map and Included/Omitted/Excluded views remain available | PENDING | `docs/screenshots/live-audit/L141-context-preview-retained.png` |
 | L142 | Prepare a second batch in the same session | Prompt shows incremented batch number and warns that more batches may follow | PENDING | `docs/screenshots/live-audit/L142-second-batch-prompt.png` |
 | L143 | Review structured import and delete | Native diff, Apply confirmation and wrapped explicit delete warning appear before Apply | PASS | `docs/screenshots/live-audit/L154-structured-import-review.png`, `L155-native-diff.png`, `L156-import-confirmation.png`, `L160-delete-confirmation-2.png`, `L176-delete-warning-wrapped.png` |
