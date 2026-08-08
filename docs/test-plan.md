@@ -5,7 +5,7 @@ This checklist records gates, not current results. Leave a box unchecked until c
 ## Automated gates
 
 - [x] Clean Kotlin/Java compilation and instrumentation succeed with the configured JDK 21 toolchain.
-- [x] All 105 unit and PSI/platform tests pass with no skipped tests.
+- [x] All 188 unit and PSI/platform tests pass with no skipped tests.
 - [x] Ktlint/static checks pass.
 - [x] Context Policy codec/default/projection/packing tests pass.
 - [x] Session/exclusion/Return Instruction tests pass.
@@ -56,5 +56,5 @@ This checklist records gates, not current results. Leave a box unchecked until c
 ## Final delivery
 
 - [x] Exact commands, versions, test totals, verifier result, ZIP path/hash and known limitations are recorded in [release-evidence-2026-08-08.md](release-evidence-2026-08-08.md).
-- [ ] Git diff/status are reviewed; no required TODO or generated junk remains.
+- [x] Git diff/status are reviewed; no required TODO or generated junk remains.
 - [ ] Required files are committed and `main` is pushed successfully.
