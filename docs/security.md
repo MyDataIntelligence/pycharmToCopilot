@@ -16,7 +16,7 @@ Outbound ZIP discovery is read with compressed, expanded, per-entry and entry-co
 
 The session manifest records repository ID, session/batch, plugin version, attachment/source mapping, hashes, function hashes, reasons, relations, policy and guideline sources. It is kept under `.session` and is not an upload attachment. Retention cleanup is constrained to direct session children, skips sessions marked keep, and defaults to seven days.
 
-Batch/session/permanent exclusions are distinct persisted decisions. **Include once** is a narrow current-batch override, not a secret-scanner bypass; suspicious content still requires confirmation.
+Batch/session/permanent exclusions are distinct persisted decisions. External repository source IDs remain stable for a real repository root, and session-scoped external exclusions follow the active conversation session across switching and restart. **Include once** is a narrow current-batch override, not a secret-scanner bypass; suspicious content still requires confirmation.
 
 ## Inbound patches
 

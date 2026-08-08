@@ -73,7 +73,7 @@ class PromptSkillsPanel(
                         add(JButton("Context Policy").apply { addActionListener { editPolicy() } })
                         add(JButton("Add").apply { addActionListener { addSkill() } })
                         add(
-                            JButton("Duplicate skill + policy").apply {
+                            JButton("Duplicate").apply {
                                 toolTipText = "Create an independent copy of this prompt skill and its Context Policy"
                                 addActionListener { duplicateSkill() }
                             },

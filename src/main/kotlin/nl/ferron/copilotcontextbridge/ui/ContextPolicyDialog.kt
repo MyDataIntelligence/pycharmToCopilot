@@ -21,6 +21,7 @@ import javax.swing.JSpinner
 import javax.swing.JTable
 import javax.swing.SpinnerNumberModel
 import javax.swing.table.AbstractTableModel
+import javax.swing.table.DefaultTableCellRenderer
 
 /** Editable policy for the currently selected prompt library entry. */
 class ContextPolicyDialog(
@@ -53,6 +54,16 @@ class ContextPolicyDialog(
         branchScope.selectedIndex = if (branchRule?.parameters?.get("scope") in setOf("selected", "selected-changed")) 1 else 0
         table.autoCreateRowSorter = true
         table.fillsViewportHeight = true
+        // Keep long resolver and bundle identifiers inspectable instead of silently replacing
+        // them with ellipses.  The policy editor is intentionally horizontally scrollable.
+        table.autoResizeMode = JTable.AUTO_RESIZE_OFF
+        val columnWidths = intArrayOf(72, 170, 210, 82, 82, 72, 90, 150, 82)
+        columnWidths.forEachIndexed { index, width ->
+            table.columnModel.getColumn(index).preferredWidth = width
+        }
+        table.columnModel.getColumn(1).cellRenderer = TooltipCellRenderer()
+        table.columnModel.getColumn(2).cellRenderer = TooltipCellRenderer()
+        table.columnModel.getColumn(7).cellRenderer = TooltipCellRenderer()
         init()
     }
 
@@ -234,6 +245,13 @@ class ContextPolicyDialog(
                 8 -> rule.keepSeparate = value as Boolean
             }
             fireTableCellUpdated(rowIndex, columnIndex)
+        }
+    }
+
+    private class TooltipCellRenderer : DefaultTableCellRenderer() {
+        override fun setValue(value: Any?) {
+            super.setValue(value)
+            toolTipText = value?.toString()
         }
     }
 }

@@ -63,6 +63,18 @@ class ProjectSettings : PersistentStateComponent<ProjectSettings.Data> {
 
         @JvmField var externalAlwaysExcludedSourceKeys: MutableList<String> = mutableListOf()
 
+        /** Stable IDs for external repository roots used by persisted exclusion keys. */
+        @JvmField var externalRepositoryIdsByRoot: MutableMap<String, String> = mutableMapOf()
+
+        /**
+         * External repository exclusions that apply to one Copilot conversation session.
+         *
+         * Unlike project-level exclusions, these must follow the active conversation session
+         * when the user switches sessions in the tool window.  Keeping the map in project state
+         * also prevents a restart from accidentally broadening a previously scoped exclusion.
+         */
+        @JvmField var externalSessionExcludedSourceKeys: MutableMap<String, MutableList<String>> = mutableMapOf()
+
         @JvmField var postApplyCommand: String = ""
 
         /** Blank or absent values inherit the application-level default for that return mode. */

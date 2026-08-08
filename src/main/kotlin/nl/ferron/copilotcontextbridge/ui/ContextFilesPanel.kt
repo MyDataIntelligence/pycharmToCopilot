@@ -168,22 +168,23 @@ class ContextFilesPanel(
         add(
             JPanel(BorderLayout(0, 2)).apply {
                 isOpaque = false
-                add(
+                val pathLabel =
                     JLabel(
                         if (candidate.repositoryId.isBlank()) {
                             candidate.relativePath
                         } else {
                             "${candidate.displayRepository}: ${candidate.relativePath}"
                         },
-                    ),
-                    BorderLayout.NORTH,
-                )
+                    ).apply {
+                        toolTipText = text
+                    }
+                add(pathLabel, BorderLayout.NORTH)
                 add(
                     JLabel(
                         "<html><font color='#888888'>$detail · priority ${candidate.score} · depth ${candidate.depth}<br>" +
                             "resolver ${candidate.resolverId.ifBlank { "n/a" }} · " +
                             "policy ${candidate.policyRuleId.ifBlank { "n/a" }}<br>${candidate.sha256}</font></html>",
-                    ),
+                    ).apply { toolTipText = detail },
                     BorderLayout.CENTER,
                 )
             },

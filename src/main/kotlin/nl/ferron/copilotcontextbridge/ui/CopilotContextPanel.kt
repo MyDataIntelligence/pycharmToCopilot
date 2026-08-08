@@ -1253,8 +1253,12 @@ class CopilotContextPanel(
         }
         invalidatePreparedBatch()
         externalRegistry.clear()
-        externalRegistry.startNewSession()
         selectionService.startNewSession()
+        // Switch the project session before clearing the registry's session-scoped external
+        // exclusions.  The registry resolves its persisted exclusion set from the active session;
+        // clearing it first would erase the old session's exclusions and make them leak or vanish
+        // when the user later switches back.
+        externalRegistry.startNewSession()
         status.text = "New Copilot session started. Select files for batch 1."
         dragLabel.text = "Drag becomes available after preparation"
         recalculate()

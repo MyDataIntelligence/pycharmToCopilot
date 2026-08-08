@@ -3,6 +3,8 @@ package nl.ferron.copilotcontextbridge.state
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import nl.ferron.copilotcontextbridge.ProjectRoot
+import nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolver
+import nl.ferron.copilotcontextbridge.external.ExternalRepositorySelectionRegistry
 import java.nio.file.Files
 
 class ContextSelectionServiceTest : BasePlatformTestCase() {
@@ -39,6 +41,34 @@ class ContextSelectionServiceTest : BasePlatformTestCase() {
         assertEquals(setOf("src/generated_dependency.py"), service.excludedAutomaticPaths())
         service.clearAutomaticExclusions()
         assertEmpty(service.excludedAutomaticPaths())
+    }
+
+    fun testExternalSessionExclusionsFollowConversationSessionSwitch() {
+        val root = ProjectRoot.path(project)
+        val path = root.resolve("external/src/service.py")
+        Files.createDirectories(path.parent)
+        Files.writeString(path, "def service():\n    return True\n")
+        val repository = ExternalRepositoryDropResolver.Repository("external", "external", root, true)
+        val source =
+            ExternalRepositoryDropResolver.Source(
+                repository,
+                "external/src/service.py",
+                path,
+                ExternalRepositoryDropResolver.Kind.PINNED_FILE,
+            )
+        val registry = project.getService(ExternalRepositorySelectionRegistry::class.java)
+        registry.registerConfirmed(listOf(source))
+        val selection = project.getService(ContextSelectionService::class.java)
+        val originalSession = selection.activeConversationSessionId()
+
+        registry.excludeForSession(source.key)
+        assertTrue(source.key in registry.excludedSourceKeys())
+
+        selection.startNewSession()
+        registry.startNewSession()
+        assertFalse(source.key in registry.excludedSourceKeys())
+        assertTrue(selection.switchConversationSession(originalSession))
+        assertTrue(source.key in registry.excludedSourceKeys())
     }
 
     fun testClearRemovesPinnedFilesDiscoveryRootsAndAutomaticExclusions() {

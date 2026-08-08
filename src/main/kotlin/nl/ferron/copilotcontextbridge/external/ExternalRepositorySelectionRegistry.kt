@@ -4,6 +4,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
+import nl.ferron.copilotcontextbridge.state.ContextSelectionService
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.concurrent.CopyOnWriteArrayList
@@ -26,28 +27,64 @@ class ExternalRepositorySelectionRegistry(
     )
 
     private val sources = linkedMapOf<String, ExternalRepositoryDropResolver.Source>()
+
+    /** Stable repository IDs prevent exclusion keys changing when another same-named repo is dropped. */
+    private val fallbackRepositoryIds = linkedMapOf<String, String>()
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
     private val batchExcluded = linkedSetOf<String>()
-    private val sessionExcluded = linkedSetOf<String>()
     private val includeOnce = linkedSetOf<String>()
 
     fun register(result: ExternalRepositoryDropResolver.Result) {
-        val combined = (sources.values + result.accepted).distinctBy { it.repository.root.toString() + "::" + it.relativePath }
-        val rootsByName = combined.map { it.repository }.distinctBy { it.root }.groupBy { it.name }
+        val combined =
+            (sources.values + result.accepted)
+                .distinctBy { it.repository.root.toString() + "::" + it.relativePath }
+        val assignedIds = linkedMapOf<String, String>()
+        combined
+            .map { it.repository }
+            .distinctBy {
+                it.root
+                    .toAbsolutePath()
+                    .normalize()
+                    .toString()
+            }.sortedBy { it.root.toString().lowercase() }
+            .forEach { repository ->
+                val rootKey =
+                    repository.root
+                        .toAbsolutePath()
+                        .normalize()
+                        .toString()
+                val stableIds = repositoryIdsByRoot()
+                val existing = stableIds[rootKey]
+                if (existing != null) {
+                    assignedIds[rootKey] = existing
+                    return@forEach
+                }
+                val used = (stableIds.values + assignedIds.values).toSet()
+                val requested = repository.id.ifBlank { repository.name }
+                val candidate =
+                    if (requested !in used) {
+                        requested
+                    } else {
+                        "${repository.name}-${shortHash(rootKey.lowercase())}"
+                    }
+                val unique =
+                    generateSequence(candidate) { value ->
+                        "$value-${shortHash(rootKey.lowercase()).take(4)}"
+                    }.first { it !in used }
+                stableIds[rootKey] = unique
+                assignedIds[rootKey] = unique
+            }
         sources.clear()
         combined.forEach { source ->
+            val rootKey =
+                source.repository.root
+                    .toAbsolutePath()
+                    .normalize()
+                    .toString()
             val repository =
-                if (rootsByName.getValue(source.repository.name).size == 1) {
-                    source.repository
-                } else {
-                    source.repository.copy(
-                        id = "${source.repository.name}-${shortHash(
-                            source.repository.root
-                                .toString()
-                                .lowercase(),
-                        )}",
-                    )
-                }
+                source.repository.copy(
+                    id = assignedIds.getValue(rootKey),
+                )
             val canonical = source.copy(repository = repository)
             sources[canonical.key] = canonical
         }
@@ -63,11 +100,14 @@ class ExternalRepositorySelectionRegistry(
     }
 
     fun clear() {
-        if (sources.isEmpty()) return
+        val changed =
+            sources.isNotEmpty() ||
+                batchExcluded.isNotEmpty() ||
+                includeOnce.isNotEmpty()
         sources.clear()
         batchExcluded.clear()
         includeOnce.clear()
-        fireChanged()
+        if (changed) fireChanged()
     }
 
     /** Keeps archive discovery sources available so a following batch can select the next unsent entries. */
@@ -87,13 +127,14 @@ class ExternalRepositorySelectionRegistry(
     fun excludeForSession(sourceKey: String) {
         includeOnce.remove(sourceKey)
         batchExcluded.remove(sourceKey)
-        if (sessionExcluded.add(sourceKey)) fireChanged()
+        val excluded = sessionExcluded()
+        if (excluded.add(sourceKey)) fireChanged()
     }
 
     fun alwaysExclude(sourceKey: String) {
         includeOnce.remove(sourceKey)
         batchExcluded.remove(sourceKey)
-        sessionExcluded.remove(sourceKey)
+        sessionExcluded().remove(sourceKey)
         val persisted = persistentAlwaysExcluded()
         if (sourceKey !in persisted) {
             persisted.add(sourceKey)
@@ -108,24 +149,25 @@ class ExternalRepositorySelectionRegistry(
     fun removeExclusion(sourceKey: String) {
         val changed =
             batchExcluded.remove(sourceKey) or
-                sessionExcluded.remove(sourceKey) or
+                sessionExcluded().remove(sourceKey) or
                 persistentAlwaysExcluded().remove(sourceKey) or
                 includeOnce.remove(sourceKey)
         if (changed) fireChanged()
     }
 
-    fun excludedSourceKeys(): Set<String> = (batchExcluded + sessionExcluded + persistentAlwaysExcluded()).toSet() - includeOnce
+    fun excludedSourceKeys(): Set<String> = (batchExcluded + sessionExcluded() + persistentAlwaysExcluded()).toSet() - includeOnce
 
     fun exclusionScope(sourceKey: String): String =
         when (sourceKey) {
             in persistentAlwaysExcluded() -> "project"
-            in sessionExcluded -> "session"
+            in sessionExcluded() -> "session"
             else -> "batch"
         }
 
     fun startNewSession() {
-        val changed = sessionExcluded.isNotEmpty() || batchExcluded.isNotEmpty() || includeOnce.isNotEmpty()
-        sessionExcluded.clear()
+        val excluded = sessionExcluded()
+        val changed = excluded.isNotEmpty() || batchExcluded.isNotEmpty() || includeOnce.isNotEmpty()
+        excluded.clear()
         batchExcluded.clear()
         includeOnce.clear()
         if (changed) fireChanged()
@@ -157,6 +199,63 @@ class ExternalRepositorySelectionRegistry(
 
     private fun persistentAlwaysExcluded(): MutableList<String> =
         project?.getService(ProjectSettings::class.java)?.state?.externalAlwaysExcludedSourceKeys ?: mutableListOf()
+
+    private fun repositoryIdsByRoot(): MutableMap<String, String> =
+        project?.getService(ProjectSettings::class.java)?.state?.externalRepositoryIdsByRoot ?: fallbackRepositoryIds
+
+    /**
+     * Session exclusions are looked up lazily from the active conversation session.  This is
+     * important because the session selector changes ContextSelectionService state before this
+     * registry is asked to recalculate; a single in-memory set would leak an exclusion into the
+     * newly selected conversation.
+     */
+    private fun sessionExcluded(): MutableSet<String> {
+        val settings = project?.getService(ProjectSettings::class.java)
+        val sessionId = project?.getService(ContextSelectionService::class.java)?.activeConversationSessionId() ?: DEFAULT_SESSION
+        if (settings == null) return fallbackSessionExcluded
+        settings.state.externalSessionExcludedSourceKeys.getOrPut(sessionId) { mutableListOf() }
+        return MutableListSetView(settings.state.externalSessionExcludedSourceKeys, sessionId)
+    }
+
+    /** Mutable set view over the persisted list, avoiding a second source of truth. */
+    private class MutableListSetView(
+        private val map: MutableMap<String, MutableList<String>>,
+        private val key: String,
+    ) : AbstractMutableSet<String>() {
+        private val list: MutableList<String> get() = map.getOrPut(key) { mutableListOf() }
+
+        override val size: Int get() = list.distinct().size
+
+        override fun add(element: String): Boolean {
+            if (element in list) return false
+            list += element
+            return true
+        }
+
+        override fun iterator(): MutableIterator<String> {
+            val snapshot = list.distinct().toMutableList()
+            var current: String? = null
+            return object : MutableIterator<String> {
+                private val delegate = snapshot.iterator()
+
+                override fun hasNext(): Boolean = delegate.hasNext()
+
+                override fun next(): String = delegate.next().also { current = it }
+
+                override fun remove() {
+                    val value = current ?: throw IllegalStateException("next() must be called before remove()")
+                    list.remove(value)
+                    current = null
+                }
+            }
+        }
+    }
+
+    private val fallbackSessionExcluded = linkedSetOf<String>()
+
+    private companion object {
+        const val DEFAULT_SESSION = "__default__"
+    }
 
     private fun fireChanged() = listeners.forEach { it() }
 

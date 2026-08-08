@@ -8,7 +8,7 @@ This record separates verified automated/install evidence from the still-pending
 - Kotlin: 2.1.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
 - Command: `.\gradlew.bat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-livefix --no-daemon`.
-- Result: `BUILD SUCCESSFUL`; 50 suites and 188 tests, 0 failures, 0 errors and 0 skipped tests.
+- Result: `BUILD SUCCESSFUL`; 51 suites and 191 tests, 0 failures, 0 errors and 0 skipped tests.
 - The same final-audit command rebuilt the ZIP and ran the verifier.
 - Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
 
@@ -17,10 +17,10 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 ## ZIP and installer result
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
-- Repository copy produced by `install.ps1`: 812234 bytes, SHA-256 `901AA4B35E7BA3C4691970B0DE214765C0F3831B0C934B7A404916A6C311E553`.
+- Repository copy produced by the final `install.ps1`: 823335 bytes, SHA-256 `7726EEC1DACC49BBAC202875114AED9C03667C5476EDD7776A0699E48A811591`.
 - Final verification ZIP: `build-final-livefix/distributions/copilot-context-bridge-1.0.0.zip`.
-- Final verification size: 799730 bytes.
-- Final verification SHA-256: `90D69C1C91652CE0CDC3EBE6439B09DCFB85E6403E6386B04F9C623DDF4A5308`.
+- Final verification size: 808336 bytes.
+- Final verification SHA-256: `2FCD1C46776702CE0E2B8F996FEA83DD118E195DA59AA7DD1E60158E9B2F1E0B`.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
 - `install.ps1` completed successfully, rebuilt the current source and copied the ZIP into the repository distribution folder.
 - `install.ps1` completed successfully and atomically installed the current build to `%APPDATA%/JetBrains/PyCharm2026.2/plugins/copilot-context-bridge`.
@@ -47,6 +47,6 @@ The reviewed full-window screenshots [`L174-reinstalled-final.png`](screenshots/
 
 ## Visual acceptance status
 
-The broad matrix in `live-pycharm-test-matrix.md` remains `PENDING`; only reviewed screenshots are cited as evidence. The Windows Computer Use runtime could enumerate and uniquely identify the real PyCharm window, but some scripted click/accessibility attempts were not reliable after reset. Unreviewed captures were rejected rather than used as evidence.
+The broad matrix in `live-pycharm-test-matrix.md` remains `PENDING`; only reviewed screenshots are cited as evidence. The final reinstall/startup state is captured in `docs/screenshots/live-audit/L181-reinstalled-session-stable-ids.png`. The Windows Computer Use runtime could enumerate and uniquely identify the real PyCharm window, but some scripted click/accessibility attempts were not reliable after reset. Unreviewed captures were rejected rather than used as evidence.
 
 No matrix row was marked `PASS` without a reviewed full-window screenshot. The release is therefore buildable, verifier-compatible and installable; a screenshot-per-scenario audit of every interactive row is not claimed complete in this environment.

@@ -15,9 +15,17 @@ class AddWithPromptSkillAction : AnAction() {
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
         val skills = AppSettings.getInstance().state.promptSkills
+        // The built-in library normally guarantees at least one entry, but an imported or
+        // externally edited application state can still be empty.  Never let a context-menu
+        // action crash with an IndexOutOfBoundsException in that state.
+        if (skills.isEmpty()) {
+            ActionSupport.open(event)
+            return
+        }
         val dialog = PromptSkillDialog(project, skills.map { it.name })
         if (!dialog.showAndGet()) return
-        project.getService(ProjectSettings::class.java).state.selectedPromptSkillId = skills[dialog.selectedIndex].id
+        val selectedSkill = skills.getOrNull(dialog.selectedIndex) ?: return
+        project.getService(ProjectSettings::class.java).state.selectedPromptSkillId = selectedSkill.id
         ActionSupport.selection(event)?.addSelection(ActionSupport.files(event))
         ActionSupport.open(event)
     }
