@@ -3,6 +3,10 @@ package nl.ferron.copilotcontextbridge.patch
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class CopilotPatchSnifferTest {
     @Test
@@ -20,4 +24,40 @@ class CopilotPatchSnifferTest {
         )
         assertFalse(CopilotPatchSniffer.matchesJson("not json"))
     }
+
+    @Test
+    fun acceptsSafeSourceOnlyZipForManualImportReview() {
+        val path = Files.createTempFile("ccb-source-only-", ".zip")
+        try {
+            Files.write(path, zipOf("src/main.py" to "def run():\n    return 1\n"))
+
+            assertTrue(CopilotPatchSniffer.matches(path))
+        } finally {
+            Files.deleteIfExists(path)
+        }
+    }
+
+    @Test
+    fun rejectsTraversalSourceZipBeforeImport() {
+        val path = Files.createTempFile("ccb-source-traversal-", ".zip")
+        try {
+            Files.write(path, zipOf("../outside.py" to "print('unsafe')\n"))
+
+            assertFalse(CopilotPatchSniffer.matches(path))
+        } finally {
+            Files.deleteIfExists(path)
+        }
+    }
+
+    private fun zipOf(vararg entries: Pair<String, String>): ByteArray =
+        ByteArrayOutputStream()
+            .also { output ->
+                ZipOutputStream(output).use { zip ->
+                    entries.forEach { (name, content) ->
+                        zip.putNextEntry(ZipEntry(name))
+                        zip.write(content.toByteArray())
+                        zip.closeEntry()
+                    }
+                }
+            }.toByteArray()
 }

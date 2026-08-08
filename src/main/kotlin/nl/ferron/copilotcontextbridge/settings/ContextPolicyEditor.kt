@@ -13,6 +13,8 @@ object ContextPolicyEditor {
         target.previousBatchMode = source.previousBatchMode
         target.maxRepositoryFiles = source.maxRepositoryFiles
         target.maxAttachments = source.maxAttachments
+        target.maxBundleCharacters = source.maxBundleCharacters
+        target.estimatedMaxBundleTokens = source.estimatedMaxBundleTokens
         target.bundleAutomaticContext = source.bundleAutomaticContext
         target.rules = source.rules.map(ContextRuleState::copyOf).toMutableList()
     }
@@ -28,6 +30,8 @@ object ContextPolicyEditor {
         policy.previousBatchMode = defaults.previousBatchMode
         policy.maxRepositoryFiles = defaults.maxRepositoryFiles
         policy.maxAttachments = defaults.maxAttachments
+        policy.maxBundleCharacters = defaults.maxBundleCharacters
+        policy.estimatedMaxBundleTokens = defaults.estimatedMaxBundleTokens
         policy.bundleAutomaticContext = defaults.bundleAutomaticContext
         policy.rules = defaults.rules.map(ContextRuleState::copyOf).toMutableList()
     }

@@ -7,8 +7,8 @@ This record separates verified automated/install evidence from the still-pending
 - Gradle: 9.5.0.
 - Kotlin: 2.1.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
-- Command: `.\gradlew.bat clean test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release10 --no-daemon`.
-- Result: `BUILD SUCCESSFUL`; 193 tests, 0 failures, 0 errors and 0 skipped tests.
+- Command: `.\gradlew.bat ktlintFormat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release13 --no-daemon`.
+- Result: `BUILD SUCCESSFUL`; 204 tests, 0 failures, 0 errors and 0 skipped tests.
 - The same final-audit command rebuilt the ZIP and ran the verifier.
 - Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
 
@@ -17,10 +17,10 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 ## ZIP and installer result
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
-- Repository copy produced by the final `install.ps1`: 814358 bytes, SHA-256 `EB3824799DF670DFB26E476BF0B9BADDC464BE47D5BD88A2D281E380D9F4176D`.
-- Final verification ZIP: `build-final-release10/distributions/copilot-context-bridge-1.0.0.zip`.
-- Final verification size: 814358 bytes.
-- Final verification SHA-256: `EB3824799DF670DFB26E476BF0B9BADDC464BE47D5BD88A2D281E380D9F4176D`.
+- Repository copy produced by the final `install.ps1`: 818708 bytes, SHA-256 `9D7ED207884A266630493D503537D06EC6E397E8A13C4AE1A6028C745A9785A2`.
+- Final verification ZIP: `build-final-release13/distributions/copilot-context-bridge-1.0.0.zip`.
+- Final verification size: 818708 bytes.
+- Final verification SHA-256: `9D7ED207884A266630493D503537D06EC6E397E8A13C4AE1A6028C745A9785A2`.
 - The ZIP includes the compact Batch dropdown renderer, wrapped Context Files details and their regression tests.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
 - `install.ps1` completed successfully, rebuilt the current source and copied the ZIP into the repository distribution folder.
@@ -51,7 +51,9 @@ The final Batch-row smoke test also verified that `Copy files`, `Copy text`, `Op
 
 The latest live navigation captures [`L209-current.png`](screenshots/live-audit/L209-current.png) and [`L210-batch-return.png`](screenshots/live-audit/L210-batch-return.png) show the combined Preview view and the compact Batch view with the kickoff prompt/return-text actions under the drag zone. The new dropdown popup renderer and wrapped Context Files details were separately covered by focused automated tests; these captures predate that renderer change.
 
-After the release10 build, `install.ps1` was run in full mode: it rebuilt, atomically replaced the PyCharm 2026.2 plugin, preserved the previous version in the configured backup directory, and PyCharm was restarted. The post-reinstall live captures [`L211-batch-dropdown-after-reinstall.png`](screenshots/live-audit/L211-batch-dropdown-after-reinstall.png) and [`L212-preview-wrapped-context-files.png`](screenshots/live-audit/L212-preview-wrapped-context-files.png) show the new popup provenance labels and wrapped Preview details.
+The More quick-action order was checked before and after opening Guidelines and returning to More. [`L213-more-quick-actions-current.png`](screenshots/live-audit/L213-more-quick-actions-current.png) and [`L214-more-after-guidelines-return.png`](screenshots/live-audit/L214-more-after-guidelines-return.png) show the same Quick copy and Batch history ordering after navigation.
+
+After the release13 build, `install.ps1` was run in full mode: it rebuilt, atomically replaced the PyCharm 2026.2 plugin, preserved the previous version in the configured backup directory, and PyCharm was restarted. The post-reinstall live captures [`L211-batch-dropdown-after-reinstall.png`](screenshots/live-audit/L211-batch-dropdown-after-reinstall.png) and [`L212-preview-wrapped-context-files.png`](screenshots/live-audit/L212-preview-wrapped-context-files.png) show the new popup provenance labels and wrapped Preview details.
 
 The corresponding `Copy files` assertion exposed a real `javaFileListFlavor` list containing the staged `00_REPO_CONTEXT.md`, `README.md`, `src/main/kotlin/nl/ferron/copilotcontextbridge/settings/AppSettings.kt` and generated automatic attachment, rather than a text-only paste.
 

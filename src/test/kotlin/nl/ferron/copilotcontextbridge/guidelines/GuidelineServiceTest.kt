@@ -77,6 +77,19 @@ class GuidelineServiceTest : BasePlatformTestCase() {
         assertTrue(merged.markdown.contains("Add tests."))
     }
 
+    fun testDetectsScopedAgentsFilesWhileIgnoringGeneratedTrees() {
+        addRepositoryFile("AGENTS.md", "# Root rules\n")
+        addRepositoryFile("src/AGENTS.md", "# Source rules\n")
+        addRepositoryFile("build/AGENTS.md", "# Generated rules\n")
+        val service = GuidelineService(project)
+
+        val sources = service.detect().associateBy { it.relativePath }
+
+        assertTrue(sources.containsKey("AGENTS.md"))
+        assertTrue(sources.containsKey("src/AGENTS.md"))
+        assertFalse(sources.containsKey("build/AGENTS.md"))
+    }
+
     fun testEffectiveGuidelinesAlwaysIncludeHardPythonAuthoringRules() {
         val merged = GuidelineService(project).merge("Implement Python behavior", "")
 

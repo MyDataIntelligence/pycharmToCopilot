@@ -1,5 +1,8 @@
 package nl.ferron.copilotcontextbridge.patch
 
+import nl.ferron.copilotcontextbridge.security.PathSafety
+import nl.ferron.copilotcontextbridge.security.ZipMetadataSafety
+import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -29,15 +32,31 @@ object CopilotPatchSniffer {
         }.getOrDefault(false)
 
     private fun matchesZip(path: Path): Boolean {
-        ZipInputStream(Files.newInputStream(path)).use { zip ->
+        val bytes = Files.readAllBytes(path)
+        val specialEntries = ZipMetadataSafety.specialEntryNames(bytes)
+        var hasFiles = false
+        var expanded = 0L
+        val foldedNames = mutableSetOf<String>()
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
-                val entry = zip.nextEntry ?: return false
-                if (!entry.isDirectory && entry.name.replace('\\', '/') == "changes.json") {
-                    val bytes = zip.readNBytes(CopilotPatchParser.MAX_ENTRY_BYTES + 1)
-                    if (bytes.size > CopilotPatchParser.MAX_ENTRY_BYTES) return false
-                    return matchesJson(bytes.toString(StandardCharsets.UTF_8))
+                val entry = zip.nextEntry ?: break
+                if (entry.isDirectory) continue
+                val suppliedName = entry.name.replace('\\', '/')
+                val normalized = PathSafety.normalizeRelative(suppliedName)
+                if (normalized != suppliedName || entry.name in specialEntries) return false
+                if (!foldedNames.add(normalized.lowercase())) return false
+                hasFiles = true
+                val entryBytes = zip.readNBytes(CopilotPatchParser.MAX_ENTRY_BYTES + 1)
+                if (entryBytes.size > CopilotPatchParser.MAX_ENTRY_BYTES) return false
+                expanded += entryBytes.size
+                if (expanded > CopilotPatchParser.MAX_UNCOMPRESSED_BYTES) return false
+                if (normalized == "changes.json") {
+                    if (!matchesJson(entryBytes.toString(StandardCharsets.UTF_8))) return false
                 }
             }
         }
+        // A source-only ZIP is intentionally accepted here; the import review will
+        // map basenames and leave every fallback replacement unselected until reviewed.
+        return hasFiles
     }
 }

@@ -13,6 +13,8 @@ import nl.ferron.copilotcontextbridge.guidelines.GuidelineService
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
 import java.awt.BorderLayout
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
 import java.nio.file.Files
 import javax.swing.DefaultListModel
 import javax.swing.JButton
@@ -77,10 +79,19 @@ class GuidelinesPanel(
                 addTab("Repository source", repositoryEditor)
                 addTab("Global guidelines", globalEditor)
             }
-        add(
-            JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right).apply { dividerLocation = 300 },
-            BorderLayout.CENTER,
-        )
+        val split =
+            JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right).apply {
+                resizeWeight = GuidelinesLayout.resizeWeight()
+                dividerLocation = GuidelinesLayout.dividerLocationForWidth(preferredSize.width)
+                addComponentListener(
+                    object : ComponentAdapter() {
+                        override fun componentResized(event: ComponentEvent) {
+                            dividerLocation = GuidelinesLayout.dividerLocationForWidth(width)
+                        }
+                    },
+                )
+            }
+        add(split, BorderLayout.CENTER)
         repository.document.addDocumentListener(
             SimpleDocumentListener {
                 if (!updatingRepositoryEditor) updateRepositoryDirtyState()

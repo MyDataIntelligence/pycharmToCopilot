@@ -190,6 +190,19 @@ class CopilotPatchParserTest {
         assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseZip(duplicateBytes) }
     }
 
+    @Test fun `rejects case ambiguous ZIP entries before import`() {
+        val bytes =
+            zipOf(
+                "changes.json" to validJson(),
+                "replacements/run.py" to "def run():\n    return 2\n",
+                "replacements/RUN.py" to "def run():\n    return 3\n",
+            )
+
+        val error = assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseZip(bytes) }
+
+        assertTrue(error.message.orEmpty().contains("case-ambiguous"))
+    }
+
     @Test fun `rejects known schema fields with wrong JSON types or incomplete summary`() {
         val fractionalVersion = validJson().replace("\"formatVersion\":1", "\"formatVersion\":1.5")
         val stringBoolean = validJson().replace("\"replacement\":", "\"allowAsyncChange\":\"true\",\"replacement\":")

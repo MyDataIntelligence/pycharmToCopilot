@@ -1,5 +1,6 @@
 package nl.ferron.copilotcontextbridge.staging
 
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import nl.ferron.copilotcontextbridge.model.AttachmentKind
 import nl.ferron.copilotcontextbridge.model.AttachmentPlan
@@ -37,6 +38,56 @@ class StagingSessionLifecycleTest : BasePlatformTestCase() {
         assertTrue(Files.isRegularFile(result.manifest))
         assertTrue(Files.isRegularFile(result.directory.resolve(".session/base-functions.json")))
         service.deleteSession(result.directory)
+        project.getService(ContextSelectionService::class.java).deleteBatch(pack.sessionId)
+    }
+
+    fun testStagesContextAndPinnedSourceWithRepositoryMapping() {
+        val root =
+            nl.ferron.copilotcontextbridge.ProjectRoot
+                .path(project)
+        val sourcePath = root.resolve("src/main.py")
+        Files.createDirectories(sourcePath.parent)
+        Files.writeString(sourcePath, "def run():\n    return 1\n")
+        val source = requireNotNull(LocalFileSystem.getInstance().refreshAndFindFileByNioFile(sourcePath))
+        val candidate =
+            ContextCandidate(
+                relativePath = "src/main.py",
+                absolutePath = root.resolve("src/main.py"),
+                score = 1_000,
+                depth = 0,
+                confidence = RelationConfidence.CONFIRMED,
+                relations = emptyList(),
+                pinned = true,
+                size = source.length,
+            )
+        val pack =
+            ContextPack(
+                sessionId = "stage-mapping-${UUID.randomUUID()}",
+                repositoryId = project.name,
+                markdown = "# Context\n\nOriginal path: src/main.py\n",
+                selection = RankedSelection(listOf(candidate), emptyList(), emptyList(), emptyList()),
+                relations = emptyList(),
+                symbols = emptyMap(),
+                repositoryTree = "repository/\n",
+                guidelineSources = emptyList(),
+                estimatedBytes = 10,
+                promptSkillId = "general-change",
+                attachmentPlan =
+                    AttachmentPlan(
+                        attachments = listOf(PlannedAttachment("src__main.py", AttachmentKind.PINNED_ORIGINAL, listOf(candidate))),
+                        repositoryToAttachment = mapOf("src/main.py" to "src__main.py"),
+                    ),
+            )
+
+        val result = StagingService(project).stage(pack)
+
+        assertTrue(Files.isRegularFile(result.directory.resolve("00_REPO_CONTEXT.md")))
+        assertEquals("def run():\n    return 1\n", Files.readString(result.directory.resolve("src__main.py")))
+        val manifest = Files.readString(result.manifest)
+        assertTrue(manifest.contains("\"path\": \"src/main.py\""))
+        assertTrue(manifest.contains("\"stagedName\": \"src__main.py\""))
+
+        StagingService(project).deleteSession(result.directory)
         project.getService(ContextSelectionService::class.java).deleteBatch(pack.sessionId)
     }
 

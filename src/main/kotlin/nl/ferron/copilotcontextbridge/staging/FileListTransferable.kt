@@ -17,7 +17,9 @@ class FileListTransferable(
 
     override fun getTransferData(flavor: DataFlavor): Any =
         when (flavor) {
-            DataFlavor.javaFileListFlavor -> files
+            // Return a fresh snapshot so a clipboard consumer cannot mutate the
+            // transferable's internal file list between repeated reads.
+            DataFlavor.javaFileListFlavor -> files.toList()
             DataFlavor.stringFlavor -> pathText
             else -> throw java.awt.datatransfer.UnsupportedFlavorException(flavor)
         }

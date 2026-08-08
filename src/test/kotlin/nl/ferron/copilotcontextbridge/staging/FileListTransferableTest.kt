@@ -3,6 +3,7 @@ package nl.ferron.copilotcontextbridge.staging
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.awt.datatransfer.DataFlavor
@@ -23,5 +24,16 @@ class FileListTransferableTest {
         assertFalse(transferable.isDataFlavorSupported(DataFlavor.imageFlavor))
         assertEquals(files, transferable.getTransferData(DataFlavor.javaFileListFlavor))
         assertEquals("00_REPO_CONTEXT.md\nsrc/service.py", transferable.getTransferData(DataFlavor.stringFlavor))
+    }
+
+    @Test
+    fun returnsIndependentFileListSnapshots() {
+        val transferable = FileListTransferable(listOf(File("first.py")), "first.py")
+
+        val firstRead = transferable.getTransferData(DataFlavor.javaFileListFlavor)
+        val secondRead = transferable.getTransferData(DataFlavor.javaFileListFlavor)
+
+        assertEquals(listOf(File("first.py")), firstRead)
+        assertNotSame(firstRead, secondRead)
     }
 }

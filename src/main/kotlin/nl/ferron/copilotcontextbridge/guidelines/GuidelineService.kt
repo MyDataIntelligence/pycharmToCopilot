@@ -6,6 +6,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import nl.ferron.copilotcontextbridge.ProjectRoot
+import nl.ferron.copilotcontextbridge.security.IgnoreMatcher
 import nl.ferron.copilotcontextbridge.security.PathSafety
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
@@ -51,6 +52,21 @@ class GuidelineService(
                     .filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".md") }
                     .sorted()
                     .forEach { paths += root.relativize(it).joinToString("/") }
+            }
+        }
+        // Scoped AGENTS.md files carry subtree-specific instructions and must be
+        // discoverable alongside the root file. Respect repository/plugin ignores
+        // so generated, vendored and virtual-environment trees are not scanned into
+        // the guideline set.
+        val ignoreMatcher = IgnoreMatcher(AppSettings.getInstance().state.ignorePatterns + settings.customIgnorePatterns)
+        runCatching {
+            Files.walk(root).use { stream ->
+                stream
+                    .filter { it != root && Files.isRegularFile(it) && it.fileName.toString().equals("AGENTS.md", ignoreCase = true) }
+                    .map { root.relativize(it).joinToString("/") }
+                    .filter { !ignoreMatcher.isIgnored(it) }
+                    .sorted()
+                    .forEach { paths += it }
             }
         }
         return paths.distinct().mapNotNull { relative ->

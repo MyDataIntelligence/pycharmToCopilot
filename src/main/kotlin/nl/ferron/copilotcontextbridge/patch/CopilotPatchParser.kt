@@ -3,6 +3,7 @@ package nl.ferron.copilotcontextbridge.patch
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import nl.ferron.copilotcontextbridge.security.PathSafety
+import nl.ferron.copilotcontextbridge.security.ZipMetadataSafety
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -26,7 +27,10 @@ class CopilotPatchParser {
     fun parseJson(json: String): CopilotPatch = parseObject(JsonParser.parseString(json.removePrefix("\uFEFF")).asJsonObject, emptyMap())
 
     fun parseZip(bytes: ByteArray): CopilotPatch {
+        require(bytes.size <= MAX_ARCHIVE_BYTES) { "ZIP exceeds the ${MAX_ARCHIVE_BYTES / 1024 / 1024} MB compressed limit." }
         val entries = linkedMapOf<String, ByteArray>()
+        val foldedNames = mutableSetOf<String>()
+        val specialEntries = ZipMetadataSafety.specialEntryNames(bytes)
         var total = 0L
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
@@ -36,6 +40,8 @@ class CopilotPatchParser {
                 val name = PathSafety.normalizeRelative(suppliedName)
                 require(entries.size < MAX_ENTRIES) { "ZIP contains too many entries." }
                 require(name !in entries) { "ZIP contains a duplicate entry: $name" }
+                require(foldedNames.add(name.lowercase())) { "ZIP contains a duplicate or case-ambiguous entry: $name" }
+                require(entry.name !in specialEntries) { "ZIP contains a symlink or special entry: ${entry.name}" }
                 require(name == suppliedName) { "ZIP entry must use a canonical repository-relative path: $suppliedName" }
                 val data = zip.readNBytes(MAX_ENTRY_BYTES + 1)
                 require(data.size <= MAX_ENTRY_BYTES) { "ZIP entry is too large: $name" }

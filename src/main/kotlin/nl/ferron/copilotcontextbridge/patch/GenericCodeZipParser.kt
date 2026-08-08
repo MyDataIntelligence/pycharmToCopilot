@@ -57,8 +57,11 @@ class GenericCodeZipParser {
         val mappedTargets = mutableSetOf<String>()
         val replacements =
             entries.map { (archivePath, content) ->
-                val exact = root.resolve(archivePath).normalize()
-                require(exact.startsWith(root)) { "ZIP entry escapes the repository: $archivePath" }
+                // Validate both the lexical path and the real parent chain. A repository
+                // can contain a symlinked directory whose apparent child still starts with
+                // the root while resolving outside it.
+                val exact = PathSafety.resolveInside(root, archivePath, mustExist = false)
+                require(!Files.isSymbolicLink(exact)) { "ZIP target resolves through a repository symlink: $archivePath" }
                 val targetRelative =
                     if (Files.isRegularFile(exact, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(exact)) {
                         archivePath

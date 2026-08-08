@@ -71,6 +71,20 @@ class PromptLibraryEditingTest : TestCase() {
         assertInvalid(PromptSkillLibraryCodec.encode(listOf(skill)))
     }
 
+    fun testCodecRejectsUnsafePackingLimits() {
+        val skill = AppSettings.PromptSkillState("packing", "Packing", "", "Prompt")
+
+        skill.contextPolicy.maxBundleCharacters = 9_999
+        assertInvalid(PromptSkillLibraryCodec.encode(listOf(skill)))
+
+        skill.contextPolicy.maxBundleCharacters = 10_000
+        skill.contextPolicy.estimatedMaxBundleTokens = 2_499
+        assertInvalid(PromptSkillLibraryCodec.encode(listOf(skill)))
+
+        skill.contextPolicy.estimatedMaxBundleTokens = 250_001
+        assertInvalid(PromptSkillLibraryCodec.encode(listOf(skill)))
+    }
+
     fun testCodecRepairsLegacyCustomPolicyIdentityBeforeImport() {
         val decoded =
             PromptSkillLibraryCodec
@@ -115,6 +129,34 @@ class PromptLibraryEditingTest : TestCase() {
 
         assertEquals(CopilotTarget.GITHUB_COPILOT.name, original.target)
         assertEquals(321, original.rule("matching-tests")?.priority)
+    }
+
+    fun testPolicyWorkingCopyCommitPreservesBundleCharacterAndTokenLimits() {
+        val original = ContextPolicyState.defaultFor("general-change")
+        val working =
+            original.copyOf().apply {
+                maxBundleCharacters = 37_000
+                estimatedMaxBundleTokens = 9_250
+            }
+
+        ContextPolicyEditor.replaceWith(original, working)
+
+        assertEquals(37_000, original.maxBundleCharacters)
+        assertEquals(9_250, original.estimatedMaxBundleTokens)
+    }
+
+    fun testPromptSpecificResetRestoresBundleLimits() {
+        val policy =
+            ContextPolicyState.defaultFor("reset-limits").apply {
+                maxBundleCharacters = 10_000
+                estimatedMaxBundleTokens = 2_500
+            }
+        val defaults = AppSettings.defaultPolicyForPrompt("general-change")
+
+        ContextPolicyEditor.resetToPromptDefault(policy, "general-change")
+
+        assertEquals(defaults.maxBundleCharacters, policy.maxBundleCharacters)
+        assertEquals(defaults.estimatedMaxBundleTokens, policy.estimatedMaxBundleTokens)
     }
 
     private fun assertInvalid(json: String) {

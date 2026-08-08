@@ -55,6 +55,12 @@ object PromptSkillLibraryCodec {
         }
         require(effective.maxRepositoryFiles in 1..500) { "Context Policy repository-file limit must be 1..500." }
         require(effective.maxAttachments in 2..20) { "Context Policy attachment limit must be 2..20." }
+        require(effective.maxBundleCharacters in MIN_BUNDLE_CHARACTERS..MAX_BUNDLE_CHARACTERS) {
+            "Context Policy bundle character limit must be $MIN_BUNDLE_CHARACTERS..$MAX_BUNDLE_CHARACTERS."
+        }
+        require(effective.estimatedMaxBundleTokens in MIN_BUNDLE_TOKENS..MAX_BUNDLE_TOKENS) {
+            "Context Policy estimated token limit must be $MIN_BUNDLE_TOKENS..$MAX_BUNDLE_TOKENS."
+        }
         require(effective.rules.isNotEmpty()) { "Context Policy must contain at least one rule." }
         require(
             effective.rules
@@ -74,4 +80,9 @@ object PromptSkillLibraryCodec {
             }
         }
     }
+
+    private const val MIN_BUNDLE_CHARACTERS = 10_000
+    private const val MAX_BUNDLE_CHARACTERS = 1_000_000
+    private const val MIN_BUNDLE_TOKENS = 2_500
+    private const val MAX_BUNDLE_TOKENS = 250_000
 }

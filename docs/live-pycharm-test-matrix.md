@@ -138,7 +138,7 @@ Rules:
 | L091 | More → Guidelines and back | Correct page opens; Import controls never appear there | PASS | `docs/screenshots/live-audit/L091-more-guidelines-navigation.png` |
 | L092 | More → Prompt Library and back | Editor opens with stable button placement and scroll state | PASS | `docs/screenshots/live-audit/L092-more-prompt-navigation.png` |
 | L093 | More → Settings | Correct plugin settings page opens | PASS | `docs/screenshots/live-audit/L093-more-settings.png` |
-| L094 | More quick actions repeatedly | Quick copy/history controls keep fixed vertical order and alignment | PENDING | `docs/screenshots/live-audit/L094-more-quick-actions-stable.png` |
+| L094 | More quick actions repeatedly | Quick copy/history controls keep fixed vertical order and alignment | PASS | `docs/screenshots/live-audit/L213-more-quick-actions-current.png`, `L214-more-after-guidelines-return.png` |
 
 ## Patch ingestion and validation
 
