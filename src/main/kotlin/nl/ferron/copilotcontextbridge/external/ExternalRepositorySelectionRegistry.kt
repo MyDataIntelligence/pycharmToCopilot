@@ -1,7 +1,9 @@
 package nl.ferron.copilotcontextbridge.external
 
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.project.Project
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
+import nl.ferron.copilotcontextbridge.settings.ProjectSettings
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.concurrent.CopyOnWriteArrayList
@@ -13,7 +15,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  * resolve it again with that source key before it can be registered.
  */
 @Service(Service.Level.PROJECT)
-class ExternalRepositorySelectionRegistry {
+class ExternalRepositorySelectionRegistry(
+    private val project: Project? = null,
+) {
     data class RepositorySelection(
         val repository: ExternalRepositoryDropResolver.Repository,
         val pinnedFiles: List<ExternalRepositoryDropResolver.Source>,
@@ -23,6 +27,9 @@ class ExternalRepositorySelectionRegistry {
 
     private val sources = linkedMapOf<String, ExternalRepositoryDropResolver.Source>()
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
+    private val batchExcluded = linkedSetOf<String>()
+    private val sessionExcluded = linkedSetOf<String>()
+    private val includeOnce = linkedSetOf<String>()
 
     fun register(result: ExternalRepositoryDropResolver.Result) {
         val combined = (sources.values + result.accepted).distinctBy { it.repository.root.toString() + "::" + it.relativePath }
@@ -58,12 +65,69 @@ class ExternalRepositorySelectionRegistry {
     fun clear() {
         if (sources.isEmpty()) return
         sources.clear()
+        batchExcluded.clear()
+        includeOnce.clear()
         fireChanged()
     }
 
     /** Keeps archive discovery sources available so a following batch can select the next unsent entries. */
     fun clearManualSourcesKeepArchives() {
         val changed = sources.entries.removeIf { it.value.kind != ExternalRepositoryDropResolver.Kind.ARCHIVE_FILE }
+        val exclusionsChanged = batchExcluded.isNotEmpty() || includeOnce.isNotEmpty()
+        batchExcluded.clear()
+        includeOnce.clear()
+        if (changed || exclusionsChanged) fireChanged()
+    }
+
+    fun excludeForBatch(sourceKey: String) {
+        includeOnce.remove(sourceKey)
+        if (batchExcluded.add(sourceKey)) fireChanged()
+    }
+
+    fun excludeForSession(sourceKey: String) {
+        includeOnce.remove(sourceKey)
+        batchExcluded.remove(sourceKey)
+        if (sessionExcluded.add(sourceKey)) fireChanged()
+    }
+
+    fun alwaysExclude(sourceKey: String) {
+        includeOnce.remove(sourceKey)
+        batchExcluded.remove(sourceKey)
+        sessionExcluded.remove(sourceKey)
+        val persisted = persistentAlwaysExcluded()
+        if (sourceKey !in persisted) {
+            persisted.add(sourceKey)
+            fireChanged()
+        }
+    }
+
+    fun includeOnce(sourceKey: String) {
+        if (includeOnce.add(sourceKey)) fireChanged()
+    }
+
+    fun removeExclusion(sourceKey: String) {
+        val changed =
+            batchExcluded.remove(sourceKey) or
+                sessionExcluded.remove(sourceKey) or
+                persistentAlwaysExcluded().remove(sourceKey) or
+                includeOnce.remove(sourceKey)
+        if (changed) fireChanged()
+    }
+
+    fun excludedSourceKeys(): Set<String> = (batchExcluded + sessionExcluded + persistentAlwaysExcluded()).toSet() - includeOnce
+
+    fun exclusionScope(sourceKey: String): String =
+        when (sourceKey) {
+            in persistentAlwaysExcluded() -> "project"
+            in sessionExcluded -> "session"
+            else -> "batch"
+        }
+
+    fun startNewSession() {
+        val changed = sessionExcluded.isNotEmpty() || batchExcluded.isNotEmpty() || includeOnce.isNotEmpty()
+        sessionExcluded.clear()
+        batchExcluded.clear()
+        includeOnce.clear()
         if (changed) fireChanged()
     }
 
@@ -90,6 +154,9 @@ class ExternalRepositorySelectionRegistry {
     fun addListener(listener: () -> Unit) {
         listeners += listener
     }
+
+    private fun persistentAlwaysExcluded(): MutableList<String> =
+        project?.getService(ProjectSettings::class.java)?.state?.externalAlwaysExcludedSourceKeys ?: mutableListOf()
 
     private fun fireChanged() = listeners.forEach { it() }
 

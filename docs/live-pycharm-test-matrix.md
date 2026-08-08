@@ -147,7 +147,7 @@ Rules:
 | L095 | Drop `.copilotpatch` on Import | Patch loads and validation starts off EDT | PENDING | `docs/screenshots/live-audit/L095-drop-copilotpatch.png` |
 | L096 | Drop matching `.json` | Schema sniff accepts valid patch JSON | PENDING | `docs/screenshots/live-audit/L096-drop-valid-json.png` |
 | L097 | Drop ordinary `.json` | Non-patch JSON is rejected without replacing current review | PENDING | `docs/screenshots/live-audit/L097-reject-ordinary-json.png` |
-| L098 | Open ZIP patch | `changes.json` and safe snippet files load | PENDING | `docs/screenshots/live-audit/L098-open-zip-patch.png` |
+| L098 | Open ZIP patch | `changes.json` and safe snippet files load | PASS | `docs/screenshots/live-audit/L135-structured-replace-file.png` |
 | L099 | Paste patch JSON | Clipboard content loads; Paste and Validate actions remain explicit/readable | PENDING | `docs/screenshots/live-audit/L099-paste-json.png` |
 | L100 | Drop patch on outbound page | Schema sniff routes valid patch to Import review automatically | PENDING | `docs/screenshots/live-audit/L100-outbound-patch-routing.png` |
 | L101 | Traversal/absolute/different-drive path | Patch is rejected before unsafe file access | PENDING | `docs/screenshots/live-audit/L101-reject-unsafe-path.png` |
@@ -190,3 +190,26 @@ Rules:
 | L128 | Open-folder fallback then drag | Explorer handoff provides exact prepared attachments | PENDING | `docs/screenshots/live-audit/L128-m365-folder-fallback.png` |
 | L129 | Inspect prepared prompt in Copilot | First-response question, future-batch notice and Return Instructions are present | PENDING | `docs/screenshots/live-audit/L129-m365-prepared-prompt.png` |
 | L130 | Return a code-tool patch file without sending production request | Downloaded sample routes back to Import and validates | PENDING | `docs/screenshots/live-audit/L130-m365-roundtrip-sample.png` |
+
+## ZIP discovery and whole-file import delta
+
+| ID | Scenario | Expected result | Status | Full-window screenshot |
+|---|---|---|---|---|
+| L131 | Add source ZIP to outbound batch | Safe text entries become automatic candidates; secret-like entries are visibly rejected | PASS | `docs/screenshots/live-audit/L131-outbound-zip-source.png` |
+| L132 | Prepare batch containing ZIP entries | Preparation completes off EDT and enables real file drag/copy/folder actions | PASS | `docs/screenshots/live-audit/L132-outbound-zip-prepared.png` |
+| L133 | Review source-only ZIP fallback | Exact/unique-basename add and replace proposals validate and all start unselected | PASS | `docs/screenshots/live-audit/L133-source-only-zip-review.png` |
+| L134 | Open source-only whole-file diff | Native PyCharm Current/Copilot Proposed diff opens before any Apply | PASS | `docs/screenshots/live-audit/L134-source-only-native-diff.png` |
+| L135 | Open strict structured whole-file ZIP | Root `changes.json`, BOM/CRLF snippet, session, exact-file hash and `replace_file` validate | PASS | `docs/screenshots/live-audit/L135-structured-replace-file.png` |
+
+## Final Batch dropdown and kickoff-prompt delta
+
+| ID | Scenario | Expected result | Status | Full-window screenshot |
+|---|---|---|---|---|
+| L136 | Open Pinned dropdown with overflow | One full-width list shows every pinned path and a visible vertical scrollbar | PENDING | `docs/screenshots/live-audit/L136-batch-pinned-dropdown.png` |
+| L137 | Open Automatic dropdown with more than 20 repository files | All automatic files remain inspectable with reason tags while attachment count stays at or below 20 | PENDING | `docs/screenshots/live-audit/L137-batch-automatic-dropdown.png` |
+| L138 | Prepare dropdown batch | Packing summary reports physical attachments, represented files and category bundle counts | PENDING | `docs/screenshots/live-audit/L138-batch-prepared-summary.png` |
+| L139 | Inspect prompt below prepared drag zone | Rendered prompt includes context index, skill, session, batch, original paths, Return Instructions and future-batch wait text | PENDING | `docs/screenshots/live-audit/L139-batch-kickoff-prompt.png` |
+| L140 | Copy editable kickoff prompt | Clipboard exactly matches the visible rendered prompt and no file contents are mixed in | PENDING | `docs/screenshots/live-audit/L140-copy-kickoff-prompt.png` |
+| L141 | Open More → Context preview after Batch redesign | Complete generated context, source map and Included/Omitted/Excluded views remain available | PENDING | `docs/screenshots/live-audit/L141-context-preview-retained.png` |
+| L142 | Prepare a second batch in the same session | Prompt shows incremented batch number and warns that more batches may follow | PENDING | `docs/screenshots/live-audit/L142-second-batch-prompt.png` |
+| L143 | Review structured conflict and delete | Native in-memory BASE/CURRENT/PROPOSED review and explicit delete warning appear before Apply | PENDING | `docs/screenshots/live-audit/L143-import-merge-delete.png` |

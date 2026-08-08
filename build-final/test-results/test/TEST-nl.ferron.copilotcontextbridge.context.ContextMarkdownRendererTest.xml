@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.context.ContextMarkdownRendererTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:28.786Z" hostname="FERRON" time="0.423">
+  <properties/>
+  <testcase name="testTextOnlyReturnModeDoesNotEmitPatchSchemaOrPatchOperations" classname="nl.ferron.copilotcontextbridge.context.ContextMarkdownRendererTest" time="0.261"/>
+  <testcase name="testRendersCompleteMultiBatchContractMappingsOmissionsAndHashes" classname="nl.ferron.copilotcontextbridge.context.ContextMarkdownRendererTest" time="0.083"/>
+  <testcase name="testAbsolutePathAndMermaidAreStrictlyOptIn" classname="nl.ferron.copilotcontextbridge.context.ContextMarkdownRendererTest" time="0.079"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

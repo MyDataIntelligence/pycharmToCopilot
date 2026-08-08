@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.patch.GenericCodeZipParserTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:32.394Z" hostname="FERRON" time="0.025">
+  <properties/>
+  <testcase name="exact path wins and missing path becomes add file" classname="nl.ferron.copilotcontextbridge.patch.GenericCodeZipParserTest" time="0.011"/>
+  <testcase name="utf8 bom is treated as an encoding marker instead of Python source" classname="nl.ferron.copilotcontextbridge.patch.GenericCodeZipParserTest" time="0.004"/>
+  <testcase name="structured manifest is detected and never treated as generic" classname="nl.ferron.copilotcontextbridge.patch.GenericCodeZipParserTest" time="0.001"/>
+  <testcase name="unique basename is proposed but duplicate basename is rejected as ambiguous" classname="nl.ferron.copilotcontextbridge.patch.GenericCodeZipParserTest" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -72,7 +72,12 @@ class PromptSkillsPanel(
                         add(JButton("Save skill").apply { addActionListener { saveSelected() } })
                         add(JButton("Context Policy").apply { addActionListener { editPolicy() } })
                         add(JButton("Add").apply { addActionListener { addSkill() } })
-                        add(JButton("Duplicate").apply { addActionListener { duplicateSkill() } })
+                        add(
+                            JButton("Duplicate skill + policy").apply {
+                                toolTipText = "Create an independent copy of this prompt skill and its Context Policy"
+                                addActionListener { duplicateSkill() }
+                            },
+                        )
                         add(JButton("Delete").apply { addActionListener { deleteSkill() } })
                         add(JButton("Import").apply { addActionListener { importSkills() } })
                         add(JButton("Export").apply { addActionListener { exportSkills() } })

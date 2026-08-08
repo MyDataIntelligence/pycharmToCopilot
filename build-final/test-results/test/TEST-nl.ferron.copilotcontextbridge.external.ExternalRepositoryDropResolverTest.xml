@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolverTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:30.825Z" hostname="FERRON" time="0.189">
+  <properties/>
+  <testcase name="testEqualRepositoryNamesReceiveStableDistinctIdsAndRegistryKeepsBothPaths" classname="nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolverTest" time="0.047"/>
+  <testcase name="testLikelySecretRequiresExactExplicitConfirmation" classname="nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolverTest" time="0.025"/>
+  <testcase name="testExplorerFilesAreSeparatedByDetectedGitRepository" classname="nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolverTest" time="0.03"/>
+  <testcase name="testRegistrySupportsSessionAndIncludeOnceExclusions" classname="nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolverTest" time="0.029"/>
+  <testcase name="testRepositoryAndPluginIgnoreRulesAreApplied" classname="nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolverTest" time="0.031"/>
+  <testcase name="testDirectoryIsDiscoveryInstructionAndNotUploadCandidate" classname="nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolverTest" time="0.016"/>
+  <testcase name="testExternalNonGitPathIsRejectedButCurrentProjectPathIsAccepted" classname="nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolverTest" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

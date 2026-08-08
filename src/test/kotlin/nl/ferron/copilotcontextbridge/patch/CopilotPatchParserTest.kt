@@ -54,6 +54,44 @@ class CopilotPatchParserTest {
         assertEquals(null, replacement.replacement)
     }
 
+    @Test fun `parses structured whole file replacement with exact hash`() {
+        val json =
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"replace_file","path":"src/existing.py","originalHash":"$VALID_HASH","replacement":"VALUE = 2\n"}]}"""
+
+        val replacement = CopilotPatchParser().parseJson(json).replacements.single()
+
+        assertEquals("replace_file", replacement.operation)
+        assertEquals(FILE_OPERATION_QUALIFIED_NAME, replacement.qualifiedName)
+        assertEquals(VALID_HASH, replacement.originalHash)
+        assertEquals("VALUE = 2\n", replacement.replacement)
+    }
+
+    @Test fun `utf8 bom is accepted for structured json and zip snippet`() {
+        val changes =
+            "\uFEFF" +
+                """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"replace_file","path":"src/existing.py","originalHash":"$VALID_HASH","replacementFile":"replacements/existing.py"}]}"""
+        val bytes =
+            ByteArrayOutputStream()
+                .also { output ->
+                    ZipOutputStream(output).use { zip ->
+                        zip.putNextEntry(ZipEntry("changes.json"))
+                        zip.write(changes.toByteArray())
+                        zip.closeEntry()
+                        zip.putNextEntry(ZipEntry("replacements/existing.py"))
+                        zip.write("\uFEFFVALUE = 2\n".toByteArray())
+                    }
+                }.toByteArray()
+
+        assertEquals(
+            "VALUE = 2\n",
+            CopilotPatchParser()
+                .parseZip(bytes)
+                .replacements
+                .single()
+                .replacement,
+        )
+    }
+
     @Test fun `rejects delete file with replacement content`() {
         val json =
             """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"delete_file","path":"src/old.py","originalHash":"$VALID_HASH","replacement":"bad"}]}"""

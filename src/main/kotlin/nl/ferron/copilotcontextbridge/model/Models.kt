@@ -52,6 +52,10 @@ data class ContextCandidate(
     /** Root used only for safe source resolution; it is never rendered unless path exposure is explicitly enabled. */
     val repositoryRoot: Path? = null,
     val repositoryName: String = repositoryId,
+    /** Resolver that primarily selected this candidate; empty for legacy/manual candidates. */
+    val resolverId: String = "",
+    /** Policy rule that primarily selected this candidate; empty when no rule applies. */
+    val policyRuleId: String = "",
 )
 
 /** Unique key used in manifests and attachment mappings without changing repository-relative paths. */
@@ -110,10 +114,28 @@ data class AttachmentPlan(
 
     fun attachmentFor(candidate: ContextCandidate): String? = repositoryToAttachment[candidate.sourceKey]
 
+    /** Pure packing summary used by previews without depending on Swing/UI state. */
+    fun categorySummary(): List<AttachmentCategorySummary> =
+        attachments
+            .groupBy { it.bundleGroup.ifBlank { "uncategorized" } }
+            .map { (group, groupedAttachments) ->
+                AttachmentCategorySummary(
+                    bundleGroup = group,
+                    attachmentCount = groupedAttachments.size,
+                    repositoryFileCount = groupedAttachments.sumOf { it.candidates.size },
+                )
+            }.sortedWith(compareBy<AttachmentCategorySummary> { it.bundleGroup.lowercase() }.thenBy { it.bundleGroup })
+
     companion object {
         fun empty() = AttachmentPlan(emptyList(), emptyMap())
     }
 }
+
+data class AttachmentCategorySummary(
+    val bundleGroup: String,
+    val attachmentCount: Int,
+    val repositoryFileCount: Int,
+)
 
 data class PlannedAttachment(
     val stagedName: String,

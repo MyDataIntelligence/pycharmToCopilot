@@ -43,105 +43,113 @@ class StagingService(
         cleanup(stagingRoot)
         val directory = stagingRoot.resolve("${pack.repositoryId}_${pack.sessionId}")
         Files.createDirectory(directory)
-        val metadata = directory.resolve(".session")
-        Files.createDirectory(metadata)
-        val contextPath = directory.resolve("00_REPO_CONTEXT.md")
-        Files.writeString(contextPath, pack.markdown, StandardCharsets.UTF_8)
-        val staged =
-            mutableListOf(
-                StagedFile(
-                    "00_REPO_CONTEXT.md",
-                    "00_REPO_CONTEXT.md",
-                    contextPath,
-                    FunctionHasher.hash(pack.markdown),
-                    "generated repository context",
-                    false,
-                ),
-            )
-        pack.attachmentPlan.attachments.forEach { attachment ->
-            val target = directory.resolve(attachment.stagedName)
-            when (attachment.kind) {
-                AttachmentKind.PINNED_ORIGINAL -> writePinnedAttachment(projectRoot, attachment, target)
-                AttachmentKind.AUTOMATIC_BUNDLE -> writeAutomaticBundle(projectRoot, pack.repositoryId, attachment, target)
-                AttachmentKind.GENERATED_CONTEXT -> Files.writeString(target, attachment.generatedContent, StandardCharsets.UTF_8)
-            }
-            staged +=
-                StagedFile(
-                    if (attachment.kind == AttachmentKind.PINNED_ORIGINAL) {
-                        attachment.candidates.single().relativePath
-                    } else {
-                        "generated:${attachment.stagedName}"
-                    },
-                    attachment.stagedName,
-                    target,
-                    sha256(target),
-                    attachment.candidates.joinToString(", ") { candidateReason(it) },
-                    attachment.candidates.singleOrNull()?.pinned == true,
+        try {
+            val metadata = directory.resolve(".session")
+            Files.createDirectory(metadata)
+            val contextPath = directory.resolve("00_REPO_CONTEXT.md")
+            Files.writeString(contextPath, pack.markdown, StandardCharsets.UTF_8)
+            val staged =
+                mutableListOf(
+                    StagedFile(
+                        "00_REPO_CONTEXT.md",
+                        "00_REPO_CONTEXT.md",
+                        contextPath,
+                        FunctionHasher.hash(pack.markdown),
+                        "generated repository context",
+                        false,
+                    ),
                 )
-        }
-        val service = project.getService(ContextPackService::class.java)
-        val baseFunctions = captureBaseFunctions(pack)
-        val baseFunctionsFile = metadata.resolve("base-functions.json")
-        Files.writeString(baseFunctionsFile, GsonBuilder().setPrettyPrinting().create().toJson(baseFunctions), StandardCharsets.UTF_8)
-        val manifestData =
-            linkedMapOf<String, Any>(
-                "formatVersion" to 1,
-                "sessionId" to pack.sessionId,
-                "repositoryId" to pack.repositoryId,
-                "repositoryFingerprint" to service.repositoryFingerprint(),
-                "repositoryRoot" to projectRoot.toString(),
-                "createdAt" to Instant.now().toString(),
-                "pluginVersion" to "1.0.0",
-                "baseFunctionsFile" to ".session/base-functions.json",
-                "promptSkillId" to pack.promptSkillId,
-                "physicalAttachmentCount" to staged.size,
-                "repositoryFileCount" to pack.attachmentPlan.repositoryFileCount,
-                "files" to
-                    staged.map {
-                        mapOf(
-                            "path" to it.relativePath,
-                            "stagedName" to it.stagedName,
-                            "sha256" to it.sha256,
-                            "reason" to it.reason,
-                            "pinned" to it.pinned,
-                        )
-                    },
-                "functionHashes" to
-                    pack.symbols.flatMap { (path, symbols) ->
-                        symbols.filter { it.hash != null }.map {
+            pack.attachmentPlan.attachments.forEach { attachment ->
+                val target = directory.resolve(attachment.stagedName)
+                when (attachment.kind) {
+                    AttachmentKind.PINNED_ORIGINAL -> writePinnedAttachment(projectRoot, attachment, target)
+                    AttachmentKind.AUTOMATIC_BUNDLE -> writeAutomaticBundle(projectRoot, pack.repositoryId, attachment, target)
+                    AttachmentKind.GENERATED_CONTEXT -> Files.writeString(target, attachment.generatedContent, StandardCharsets.UTF_8)
+                }
+                staged +=
+                    StagedFile(
+                        if (attachment.kind == AttachmentKind.PINNED_ORIGINAL) {
+                            attachment.candidates.single().relativePath
+                        } else {
+                            "generated:${attachment.stagedName}"
+                        },
+                        attachment.stagedName,
+                        target,
+                        sha256(target),
+                        attachment.candidates.joinToString(", ") { candidateReason(it) },
+                        attachment.candidates.singleOrNull()?.pinned == true,
+                    )
+            }
+            val service = project.getService(ContextPackService::class.java)
+            val baseFunctions = captureBaseFunctions(pack)
+            val baseFunctionsFile = metadata.resolve("base-functions.json")
+            Files.writeString(baseFunctionsFile, GsonBuilder().setPrettyPrinting().create().toJson(baseFunctions), StandardCharsets.UTF_8)
+            val manifestData =
+                linkedMapOf<String, Any>(
+                    "formatVersion" to 1,
+                    "sessionId" to pack.sessionId,
+                    "repositoryId" to pack.repositoryId,
+                    "repositoryFingerprint" to service.repositoryFingerprint(),
+                    "repositoryRoot" to projectRoot.toString(),
+                    "createdAt" to Instant.now().toString(),
+                    "pluginVersion" to "1.0.0",
+                    "baseFunctionsFile" to ".session/base-functions.json",
+                    "promptSkillId" to pack.promptSkillId,
+                    "physicalAttachmentCount" to staged.size,
+                    "repositoryFileCount" to pack.attachmentPlan.repositoryFileCount,
+                    "files" to
+                        staged.map {
                             mapOf(
-                                "path" to path,
-                                "qualifiedName" to it.qualifiedName,
-                                "hash" to it.hash,
+                                "path" to it.relativePath,
+                                "stagedName" to it.stagedName,
+                                "sha256" to it.sha256,
+                                "reason" to it.reason,
+                                "pinned" to it.pinned,
                             )
-                        }
-                    },
-                "relations" to pack.relations,
-                "guidelineSources" to pack.guidelineSources,
-                "repositoryFiles" to
-                    pack.selection.included.map { candidate ->
-                        mapOf(
-                            "path" to candidate.relativePath,
-                            "repositoryId" to candidate.repositoryId.ifBlank { pack.repositoryId },
-                            "repositoryName" to candidate.displayRepository,
-                            "preparedAttachment" to pack.attachmentPlan.repositoryToAttachment[candidate.sourceKey],
-                            "sha256" to currentSourceHash(resolveCandidateSource(projectRoot, candidate)),
-                            "reason" to candidateReason(candidate),
-                            "pinned" to candidate.pinned,
-                        )
-                    },
+                        },
+                    "functionHashes" to
+                        pack.symbols.flatMap { (path, symbols) ->
+                            symbols.filter { it.hash != null }.map {
+                                mapOf(
+                                    "path" to path,
+                                    "qualifiedName" to it.qualifiedName,
+                                    "hash" to it.hash,
+                                )
+                            }
+                        },
+                    "relations" to pack.relations,
+                    "guidelineSources" to pack.guidelineSources,
+                    "repositoryFiles" to
+                        pack.selection.included.map { candidate ->
+                            mapOf(
+                                "path" to candidate.relativePath,
+                                "repositoryId" to candidate.repositoryId.ifBlank { pack.repositoryId },
+                                "repositoryName" to candidate.displayRepository,
+                                "preparedAttachment" to pack.attachmentPlan.repositoryToAttachment[candidate.sourceKey],
+                                "sha256" to currentSourceHash(resolveCandidateSource(projectRoot, candidate)),
+                                "reason" to candidateReason(candidate),
+                                "pinned" to candidate.pinned,
+                            )
+                        },
+                )
+            val manifest = metadata.resolve("context-session.json")
+            Files.writeString(manifest, GsonBuilder().setPrettyPrinting().create().toJson(manifestData), StandardCharsets.UTF_8)
+            val skill = AppSettings.getInstance().skill(pack.promptSkillId)
+            project.getService(ContextSelectionService::class.java).markExported(
+                pack.sessionId,
+                skill.name,
+                pack.selection.included.map { it.relativePath },
+                false,
+                pack.selection.included.map { it.sourceKey },
             )
-        val manifest = metadata.resolve("context-session.json")
-        Files.writeString(manifest, GsonBuilder().setPrettyPrinting().create().toJson(manifestData), StandardCharsets.UTF_8)
-        val skill = AppSettings.getInstance().skill(pack.promptSkillId)
-        project.getService(ContextSelectionService::class.java).markExported(
-            pack.sessionId,
-            skill.name,
-            pack.selection.included.map { it.relativePath },
-            false,
-            pack.selection.included.map { it.sourceKey },
-        )
-        return StagingResult(directory, staged, manifest)
+            return StagingResult(directory, staged, manifest)
+        } catch (error: Exception) {
+            // A failed preparation must never leave a half-session that blocks retrying the
+            // same immutable context pack. The target was created above directly beneath the
+            // controlled staging root, so the existing guarded deletion method is safe here.
+            runCatching { deleteSession(directory) }
+            throw error
+        }
     }
 
     fun deleteSession(directory: Path) {

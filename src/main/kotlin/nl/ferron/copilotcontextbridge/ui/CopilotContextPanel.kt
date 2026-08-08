@@ -54,6 +54,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.swing.BorderFactory
 import javax.swing.Box
 import javax.swing.BoxLayout
+import javax.swing.ButtonGroup
 import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.JLabel
@@ -62,8 +63,11 @@ import javax.swing.JPanel
 import javax.swing.JPopupMenu
 import javax.swing.JProgressBar
 import javax.swing.JSplitPane
+import javax.swing.JToggleButton
 import javax.swing.SwingConstants
+import javax.swing.Timer
 import javax.swing.TransferHandler
+import javax.swing.UIManager
 
 /** The primary three-step workflow and its supporting detail workspace. */
 class CopilotContextPanel(
@@ -77,7 +81,7 @@ class CopilotContextPanel(
             ProjectRoot.path(project),
             AppSettings.getInstance().state.ignorePatterns,
             projectSettings.state.customIgnorePatterns,
-            AppSettings.getInstance().state.secretFilenamePatterns,
+            AppSettings.getInstance().state.secretFilenamePatterns + projectSettings.state.projectSecretFilenamePatterns,
             projectSettings.state.textualScanLimitBytes,
         )
 
@@ -87,13 +91,28 @@ class CopilotContextPanel(
         JProgressBar().apply {
             preferredSize = Dimension(JBUI.scale(160), JBUI.scale(10))
         }
-    private val pinnedFiles = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
-    private val automaticFiles = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
+    private val batchFileCategory = JComboBox<BatchFileCategoryChoice>()
+    private val batchFiles = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
+    private val batchFilesScroll =
+        JBScrollPane(batchFiles).apply {
+            horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+            verticalScrollBarPolicy = JBScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+            preferredSize = Dimension(JBUI.scale(360), JBUI.scale(150))
+            minimumSize = Dimension(0, JBUI.scale(110))
+        }
     private val preview = JBTextArea().apply { isEditable = false }
     private val historyText = JBTextArea().apply { isEditable = false }
     private val skillCombo = JComboBox<PromptSkillChoice>()
     private val batchCombo = JComboBox<String>()
     private val dragLabel = JLabel("Drag becomes available after preparation", AllIcons.Actions.Upload, SwingConstants.CENTER)
+    private val kickoffPrompt =
+        JBTextArea(5, 36).apply {
+            isEditable = false
+            lineWrap = true
+            wrapStyleWord = true
+            text = "Prepare the batch to generate the Copilot prompt."
+        }
+    private val copyPromptButton = JButton("Copy prompt", AllIcons.Actions.Copy).apply { addActionListener { copyKickoffPrompt() } }
     private val prepareButton = greenActionButton("Prepare for Copilot") { prepareBatch() }
     private val copyButton = JButton("Copy files", AllIcons.Actions.Copy).apply { addActionListener { copyFiles() } }
     private val copyAllTextButton = JButton("Copy text", AllIcons.Actions.Copy).apply { addActionListener { copyCompletePackAsText() } }
@@ -112,6 +131,10 @@ class CopilotContextPanel(
             toolTipText = "Start a new Copilot conversation and reset previous-batch avoidance"
             addActionListener { startNewSession() }
         }
+    private val batchNavigation = JToggleButton(TopLevelNavigationModel.destinations[0]).apply { isSelected = true }
+    private val importNavigation = JToggleButton(TopLevelNavigationModel.destinations[1], AllIcons.ToolbarDecorator.Import)
+    private val previewNavigation = JToggleButton(TopLevelNavigationModel.destinations[2])
+    private val moreNavigation = JToggleButton(TopLevelNavigationModel.destinations[3])
     private val detailTabs = createStableDetailTabs()
     private val contextFilesPanel = ContextFilesPanel(project)
     private val returnInstructionsPanel =
@@ -134,16 +157,19 @@ class CopilotContextPanel(
     private var preparing = false
     private var refreshingSkills = false
     private var refreshingHistory = false
+    private var refreshingBatchCategory = false
+    private var selectedBatchCategory: BatchFileCategory? = null
+    private var pinnedCandidates: List<ContextCandidate> = emptyList()
+    private var automaticCandidates: List<ContextCandidate> = emptyList()
     private val copyContextButtons = mutableListOf<JButton>()
     private val analysisGeneration = AtomicInteger()
+    private val recalculationTimer = Timer(140) { runRecalculation() }.apply { isRepeats = false }
 
     @Volatile private var activeAnalysis: ProgressIndicator? = null
 
     init {
         border = JBUI.Borders.empty(6)
         detailTabs.addTab("More Copilot actions", createMoreActionsPanel())
-        detailTabs.addTab("Context files", contextFilesPanel)
-        detailTabs.addTab("Context preview", createPreviewPanel())
         detailTabs.addTab(
             "Guidelines",
             GuidelinesPanel(project) {
@@ -155,6 +181,7 @@ class CopilotContextPanel(
         detailTabs.addTab("Return instructions", returnInstructionsPanel)
         detailsHost.add(detailTabs, DetailMode.MORE.name)
         detailsHost.add(importPanel, DetailMode.IMPORT.name)
+        detailsHost.add(createPreviewPage(), DetailMode.PREVIEW.name)
 
         primaryPanel = createPrimaryPanel()
         wideSplit =
@@ -185,6 +212,11 @@ class CopilotContextPanel(
                 }
             }
         }
+        batchFileCategory.addActionListener {
+            if (refreshingBatchCategory) return@addActionListener
+            selectedBatchCategory = (batchFileCategory.selectedItem as? BatchFileCategoryChoice)?.category
+            renderSelectedBatchCategory()
+        }
         batchCombo.addActionListener {
             if (!refreshingHistory) showSelectedBatchDetails()
         }
@@ -192,12 +224,18 @@ class CopilotContextPanel(
         selectionService.addListener {
             ApplicationManager.getApplication().invokeLater {
                 refreshHistory()
-                if (!calculating && !preparing && staged == null) recalculate()
+                if (!preparing) {
+                    invalidatePreparedBatch()
+                    recalculate()
+                }
             }
         }
         externalRegistry.addListener {
             ApplicationManager.getApplication().invokeLater {
-                if (!preparing && staged == null) recalculate()
+                if (!preparing) {
+                    invalidatePreparedBatch()
+                    recalculate()
+                }
             }
         }
         refreshSkills()
@@ -223,24 +261,32 @@ class CopilotContextPanel(
     private fun createPrimaryToolbar() =
         JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(2, 2, 7, 2)
+            ButtonGroup().apply {
+                add(batchNavigation)
+                add(importNavigation)
+                add(previewNavigation)
+                add(moreNavigation)
+            }
+            batchNavigation.addActionListener {
+                selectNavigation(batchNavigation)
+                detailRequested = false
+                updateResponsiveWorkspace()
+            }
+            importNavigation.addActionListener { showDetails(DetailMode.IMPORT) }
+            previewNavigation.addActionListener { showDetails(DetailMode.PREVIEW) }
+            moreNavigation.addActionListener {
+                detailTabs.selectedIndex = 0
+                showDetails(DetailMode.MORE)
+            }
+            selectNavigation(batchNavigation)
             add(
-                actionRow(
-                    primaryButton("Batch") {
-                        detailRequested = false
-                        updateResponsiveWorkspace()
-                    },
-                    JButton("Import", AllIcons.ToolbarDecorator.Import).apply {
-                        addActionListener {
-                            showDetails(DetailMode.IMPORT)
-                        }
-                    },
-                    JButton("More ▾").apply {
-                        addActionListener {
-                            detailTabs.selectedIndex = 0
-                            showDetails(DetailMode.MORE)
-                        }
-                    },
-                ),
+                JPanel(GridLayout(1, 4, 6, 0)).apply {
+                    isOpaque = false
+                    add(batchNavigation)
+                    add(importNavigation)
+                    add(previewNavigation)
+                    add(moreNavigation)
+                },
                 BorderLayout.WEST,
             )
             add(
@@ -268,13 +314,7 @@ class CopilotContextPanel(
             add(Box.createVerticalStrut(JBUI.scale(12)))
             add(stepTitle("1.  Files in this batch"))
             add(Box.createVerticalStrut(JBUI.scale(5)))
-            add(
-                JPanel(GridLayout(1, 2, 8, 0)).apply {
-                    add(fileCard("PINNED", pinnedFiles))
-                    add(fileCard("AUTOMATIC", automaticFiles))
-                    maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(170))
-                },
-            )
+            add(createBatchFilesPanel())
             add(
                 actionGrid(
                     JButton("＋ Add files, folder or ZIP").apply { addActionListener { addFiles() } },
@@ -310,7 +350,7 @@ class CopilotContextPanel(
             )
             add(Box.createVerticalStrut(JBUI.scale(6)))
             add(dragLabel)
-            add(JLabel("00_REPO_CONTEXT.md is included automatically and indexes this batch.").apply { foreground = JBColor.GRAY })
+            add(createKickoffPromptPanel())
             add(actionGrid(copyButton, copyAllTextButton, openButton, nextButton))
             add(createReturnDropZone())
             components.filterIsInstance<javax.swing.JComponent>().forEach { it.alignmentX = LEFT_ALIGNMENT }
@@ -417,24 +457,59 @@ class CopilotContextPanel(
             add(JLabel("00_REPO_CONTEXT.md  ✓"), BorderLayout.EAST)
         }
 
-    private fun fileCard(
-        title: String,
-        content: JPanel,
-    ) = JPanel(BorderLayout()).apply {
-        border =
-            BorderFactory.createCompoundBorder(
-                JBUI.Borders.customLine(JBColor.border(), 1),
-                JBUI.Borders.empty(7),
+    private fun createBatchFilesPanel() =
+        JPanel(BorderLayout(0, 5)).apply {
+            border =
+                BorderFactory.createCompoundBorder(
+                    JBUI.Borders.customLine(JBColor.border(), 1),
+                    JBUI.Borders.empty(7),
+                )
+            add(
+                JPanel(BorderLayout(7, 0)).apply {
+                    isOpaque = false
+                    add(JLabel("Show"), BorderLayout.WEST)
+                    add(batchFileCategory, BorderLayout.CENTER)
+                },
+                BorderLayout.NORTH,
             )
-        add(JLabel(title).apply { font = font.deriveFont(Font.BOLD) }, BorderLayout.NORTH)
-        add(
-            JBScrollPane(content).apply {
-                border = null
-                horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
-            },
-            BorderLayout.CENTER,
-        )
-    }
+            add(batchFilesScroll, BorderLayout.CENTER)
+            maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(205))
+        }
+
+    private fun createKickoffPromptPanel() =
+        JPanel(BorderLayout(0, 5)).apply {
+            border = JBUI.Borders.emptyTop(5)
+            add(
+                JPanel(BorderLayout()).apply {
+                    isOpaque = false
+                    add(JLabel("Prompt for Copilot").apply { font = font.deriveFont(Font.BOLD) }, BorderLayout.WEST)
+                    add(
+                        JPanel(FlowLayout(FlowLayout.RIGHT, 4, 0)).apply {
+                            isOpaque = false
+                            add(copyPromptButton)
+                            add(
+                                JButton("Copy return text").apply {
+                                    toolTipText = "Copy the effective return-format instructions when Copilot responds incorrectly"
+                                    font = font.deriveFont(font.size2D - 1f)
+                                    addActionListener { copyReturnInstructions() }
+                                },
+                            )
+                        },
+                        BorderLayout.EAST,
+                    )
+                },
+                BorderLayout.NORTH,
+            )
+            add(
+                JBScrollPane(kickoffPrompt).apply { horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER },
+                BorderLayout.CENTER,
+            )
+            add(
+                JLabel("00_REPO_CONTEXT.md and file details remain available under Preview.").apply { foreground = JBColor.GRAY },
+                BorderLayout.SOUTH,
+            )
+            maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(145))
+        }
 
     private fun createMoreActionsPanel() =
         JPanel(BorderLayout(8, 8)).apply {
@@ -510,9 +585,42 @@ class CopilotContextPanel(
             )
         }
 
-    private fun createPreviewPanel() =
-        JPanel(BorderLayout(6, 6)).apply {
+    private fun createPreviewPage() =
+        JPanel(BorderLayout(0, 8)).apply {
             border = JBUI.Borders.empty(8)
+            add(
+                JPanel(BorderLayout()).apply {
+                    add(JLabel("Preview").apply { font = font.deriveFont(Font.BOLD, font.size2D + 2f) }, BorderLayout.WEST)
+                    add(
+                        JLabel("Complete outgoing context and file allocation").apply { foreground = JBColor.GRAY },
+                        BorderLayout.EAST,
+                    )
+                },
+                BorderLayout.NORTH,
+            )
+            add(
+                JSplitPane(
+                    JSplitPane.VERTICAL_SPLIT,
+                    createContextTextPreviewPanel(),
+                    JPanel(BorderLayout()).apply {
+                        border = BorderFactory.createTitledBorder(PreviewWorkspaceModel.sections[1])
+                        add(contextFilesPanel, BorderLayout.CENTER)
+                    },
+                ).apply {
+                    resizeWeight = 0.52
+                    dividerLocation = JBUI.scale(360)
+                    dividerSize = JBUI.scale(4)
+                    border = null
+                    topComponent.minimumSize = Dimension(0, JBUI.scale(180))
+                    bottomComponent.minimumSize = Dimension(0, JBUI.scale(180))
+                },
+                BorderLayout.CENTER,
+            )
+        }
+
+    private fun createContextTextPreviewPanel() =
+        JPanel(BorderLayout(6, 6)).apply {
+            border = BorderFactory.createTitledBorder(PreviewWorkspaceModel.sections[0])
             add(
                 actionRow(
                     contextCopyButton("Copy context only"),
@@ -560,16 +668,24 @@ class CopilotContextPanel(
     private fun showDetails(mode: DetailMode) {
         detailMode = mode
         detailRequested = true
+        when (mode) {
+            DetailMode.IMPORT -> selectNavigation(importNavigation)
+            DetailMode.PREVIEW -> selectNavigation(previewNavigation)
+            DetailMode.MORE -> selectNavigation(moreNavigation)
+        }
         detailsLayout.show(detailsHost, mode.name)
         updateResponsiveWorkspace()
     }
 
-    private fun primaryButton(
-        text: String,
-        action: () -> Unit,
-    ) = JButton(text).apply {
-        putClientProperty("JButton.buttonType", "default")
-        addActionListener { action() }
+    private fun selectNavigation(selected: JToggleButton) {
+        listOf(batchNavigation, importNavigation, previewNavigation, moreNavigation).forEach { button ->
+            val active = button === selected
+            button.isSelected = active
+            button.isOpaque = active
+            button.background = if (active) JBColor(0xDCEBFF, 0x31547D) else UIManager.getColor("Button.background")
+            button.foreground = if (active) JBColor(0x174EA6, 0xFFFFFF) else UIManager.getColor("Button.foreground")
+            button.font = button.font.deriveFont(if (active) Font.BOLD else Font.PLAIN)
+        }
     }
 
     private fun greenActionButton(
@@ -646,6 +762,10 @@ class CopilotContextPanel(
     private fun skillLabel(skill: AppSettings.PromptSkillState): String = "${skill.category.ifBlank { "Custom" }}  ·  ${skill.name}"
 
     private fun recalculate() {
+        if (!preparing) recalculationTimer.restart()
+    }
+
+    private fun runRecalculation() {
         val generation = analysisGeneration.incrementAndGet()
         activeAnalysis?.cancel()
         calculating = true
@@ -707,9 +827,9 @@ class CopilotContextPanel(
                 )}"
                 else -> "Safe selection ready • ${formatBytes(result.estimatedBytes)}"
             }
-        renderFileList(pinnedFiles, result.selection.included.filter { it.pinned }, true)
-        renderInvalidPinnedPaths()
-        renderFileList(automaticFiles, result.selection.included.filterNot { it.pinned }, false)
+        pinnedCandidates = result.selection.included.filter { it.pinned }
+        automaticCandidates = result.selection.included.filterNot { it.pinned }
+        refreshBatchFileCategories()
         contextFilesPanel.show(result)
         preview.text = result.markdown
         preview.caretPosition = 0
@@ -751,9 +871,7 @@ class CopilotContextPanel(
                                     if (candidate.repositoryId.isBlank()) {
                                         selectionService.excludeForBatch(candidate.relativePath)
                                     } else {
-                                        externalRegistry.remove(candidate.sourceKey)
-                                        invalidatePreparedBatch()
-                                        recalculate()
+                                        externalRegistry.excludeForBatch(candidate.sourceKey)
                                     }
                                 }
                             }
@@ -761,7 +879,12 @@ class CopilotContextPanel(
                         BorderLayout.EAST,
                     )
                     if (!pinned) {
-                        componentPopupMenu = exclusionMenu(candidate.relativePath)
+                        componentPopupMenu =
+                            if (candidate.repositoryId.isBlank()) {
+                                exclusionMenu(candidate.relativePath)
+                            } else {
+                                externalExclusionMenu(candidate)
+                            }
                         components.forEach { (it as? javax.swing.JComponent)?.componentPopupMenu = componentPopupMenu }
                     }
                 },
@@ -779,12 +902,42 @@ class CopilotContextPanel(
         panel.repaint()
     }
 
-    private fun renderInvalidPinnedPaths() {
+    private fun refreshBatchFileCategories() {
+        val invalidCount = selectionService.invalidPinnedPaths().size
+        val pinnedCount = pinnedCandidates.size + invalidCount
+        val previous = selectedBatchCategory
+        selectedBatchCategory = BatchFileCategoryModel.selectedCategory(previous, pinnedCount, automaticCandidates.size)
+        refreshingBatchCategory = true
+        try {
+            batchFileCategory.removeAllItems()
+            BatchFileCategoryModel.choices(pinnedCount, automaticCandidates.size).forEach(batchFileCategory::addItem)
+            batchFileCategory.selectedItem =
+                (0 until batchFileCategory.itemCount)
+                    .map(batchFileCategory::getItemAt)
+                    .firstOrNull { it.category == selectedBatchCategory }
+        } finally {
+            refreshingBatchCategory = false
+        }
+        renderSelectedBatchCategory()
+    }
+
+    private fun renderSelectedBatchCategory() {
+        when (selectedBatchCategory) {
+            BatchFileCategory.AUTOMATIC -> renderFileList(batchFiles, automaticCandidates, false)
+            else -> {
+                renderFileList(batchFiles, pinnedCandidates, true)
+                renderInvalidPinnedPaths(batchFiles)
+            }
+        }
+        batchFilesScroll.verticalScrollBar.value = 0
+    }
+
+    private fun renderInvalidPinnedPaths(panel: JPanel) {
         val invalid = selectionService.invalidPinnedPaths()
         if (invalid.isEmpty()) return
-        if (pack?.selection?.included?.none { it.pinned } == true) pinnedFiles.removeAll()
+        if (pinnedCandidates.isEmpty()) panel.removeAll()
         invalid.forEach { path ->
-            pinnedFiles.add(
+            panel.add(
                 JPanel(BorderLayout(3, 0)).apply {
                     isOpaque = false
                     add(
@@ -806,8 +959,8 @@ class CopilotContextPanel(
                 },
             )
         }
-        pinnedFiles.revalidate()
-        pinnedFiles.repaint()
+        panel.revalidate()
+        panel.repaint()
     }
 
     private fun candidateLabel(
@@ -849,9 +1002,12 @@ class CopilotContextPanel(
                 .joinToString("<br>") { relation ->
                     "${relation.type}: ${relation.evidence.ifBlank { "${relation.from} → ${relation.to}" }}"
                 }.ifBlank { if (pinned) "Manually selected" else "Automatic repository relation" }
-        return "<html><b>${candidate.relativePath}</b><br>" +
+        val repository = candidate.displayRepository.ifBlank { pack?.repositoryId.orEmpty() }
+        val resolver = candidate.resolverId.ifBlank { if (pinned) "explicit.pinnedFiles" else "not resolved" }
+        val policyRule = candidate.policyRuleId.ifBlank { if (pinned) "pinned-files" else "not resolved" }
+        return "<html><b>${candidate.relativePath}</b><br>Repository: $repository<br>" +
             "SHA-256: ${candidate.sha256}<br>Priority score: ${candidate.score}<br>Depth: ${candidate.depth}<br>" +
-            "Prepared attachment: $attachment<br><br>$reasons</html>"
+            "Resolver: $resolver<br>Policy rule: $policyRule<br>Prepared attachment: $attachment<br><br>$reasons</html>"
     }
 
     private fun exclusionMenu(path: String) =
@@ -876,14 +1032,36 @@ class CopilotContextPanel(
             )
         }
 
-    private fun prepareBatch(): StagingService.StagingResult? {
-        staged?.let { return it }
-        var current = pack ?: return null
+    private fun externalExclusionMenu(candidate: ContextCandidate) =
+        JPopupMenu().apply {
+            add(JMenuItem("Exclude this batch").apply { addActionListener { externalRegistry.excludeForBatch(candidate.sourceKey) } })
+            add(JMenuItem("Exclude this session").apply { addActionListener { externalRegistry.excludeForSession(candidate.sourceKey) } })
+            add(
+                JMenuItem("Always exclude this source…").apply {
+                    addActionListener {
+                        if (
+                            Messages.showYesNoDialog(
+                                project,
+                                "Always exclude ${candidate.displayRepository}: ${candidate.relativePath} from automatic context?",
+                                "Always Exclude External Source",
+                                null,
+                            ) == Messages.YES
+                        ) {
+                            externalRegistry.alwaysExclude(candidate.sourceKey)
+                        }
+                    }
+                },
+            )
+        }
+
+    private fun prepareBatch() {
+        if (staged != null || preparing) return
+        var current = pack ?: return
         val secretErrors = current.selection.validationErrors.filter { it.contains("requires explicit secret confirmation") }
         val otherErrors = current.selection.validationErrors - secretErrors.toSet()
         if (otherErrors.isNotEmpty()) {
             UiSupport.notify(project, "Cannot prepare batch", otherErrors.joinToString("<br>"), NotificationType.ERROR)
-            return null
+            return
         }
         if (secretErrors.isNotEmpty() &&
             Messages.showYesNoDialog(
@@ -893,21 +1071,43 @@ class CopilotContextPanel(
                 null,
             ) != Messages.YES
         ) {
-            return null
+            return
         }
         if (secretErrors.isNotEmpty()) current = current.copy(selection = current.selection.copy(validationErrors = emptyList()))
         preparing = true
-        return runCatching { StagingService(project).stage(current) }
-            .onSuccess {
-                staged = it
-                dragLabel.text = "Drag these ${it.files.size} files to Copilot"
-                status.text = "✓ Safe pack ready • 00_REPO_CONTEXT.md included"
-                refreshHistory()
-                updateControls()
-                UiSupport.notify(project, "Batch prepared", packingSummary(current))
-            }.onFailure { UiSupport.notify(project, "Staging failed", it.message ?: "Unknown error", NotificationType.ERROR) }
-            .getOrNull()
-            .also { preparing = false }
+        updateControls()
+        val context = current
+        object : Task.Backgroundable(project, "Preparing Copilot batch", true) {
+            override fun run(indicator: ProgressIndicator) {
+                val result = runCatching { StagingService(project).stage(context) }
+                ApplicationManager.getApplication().invokeLater {
+                    preparing = false
+                    result
+                        .onSuccess {
+                            if (pack?.sessionId == context.sessionId) {
+                                staged = it
+                                dragLabel.text = "Drag these ${it.files.size} files to Copilot"
+                                kickoffPrompt.text = currentKickoffPrompt(context)
+                                kickoffPrompt.caretPosition = 0
+                                status.text = "✓ Safe pack ready • 00_REPO_CONTEXT.md included"
+                                refreshHistory()
+                                UiSupport.notify(project, "Batch prepared", packingSummary(context))
+                            } else {
+                                runCatching { StagingService(project).deleteSession(it.directory) }
+                                UiSupport.notify(
+                                    project,
+                                    "Batch changed during preparation",
+                                    "The obsolete temporary pack was removed. Prepare the current selection again.",
+                                    NotificationType.WARNING,
+                                )
+                            }
+                        }.onFailure {
+                            UiSupport.notify(project, "Staging failed", it.message ?: "Unknown error", NotificationType.ERROR)
+                        }
+                    updateControls()
+                }
+            }
+        }.queue()
     }
 
     private fun packingSummary(context: ContextPack): String {
@@ -922,8 +1122,14 @@ class CopilotContextPanel(
             append("${context.attachmentPlan.attachmentCount} physical attachments representing ")
             append("${context.attachmentPlan.repositoryFileCount} repository files.<br>")
             append("$pinned pinned files kept separate; $automatic automatic files packed into $bundles bundle(s).")
+            context.attachmentPlan.categorySummary().filterNot { it.bundleGroup == "pinned" }.forEach { category ->
+                append(
+                    "<br>${category.bundleGroup}: ${category.repositoryFileCount} repository files in " +
+                        "${category.attachmentCount} attachment(s).",
+                )
+            }
             if (context.selection.omitted.isNotEmpty()) {
-                append("<br>${context.selection.omitted.size} relevant files were omitted; inspect them under More → Context files.")
+                append("<br>${context.selection.omitted.size} relevant files were omitted; inspect them under Preview → Context files.")
             }
             if (context.selection.excluded.isNotEmpty()) {
                 append("<br>${context.selection.excluded.size} files were excluded by user rules.")
@@ -945,9 +1151,35 @@ class CopilotContextPanel(
 
     private fun copyCompletePackAsText() {
         val result = staged ?: return
-        UiSupport.copyText(CombinedContextTextBuilder.build(AppSettings.getInstance().state.combinedTextIntro, result.files))
+        UiSupport.copyText(
+            CombinedContextTextBuilder.build(
+                AppSettings.getInstance().state.combinedTextIntro,
+                result.files,
+                kickoffPrompt.text,
+            ),
+        )
         markCurrentBatchHandedOff()
         UiSupport.notify(project, "Complete pack copied", "Metadata, paths and ${result.files.size} file contents were copied as text.")
+    }
+
+    private fun copyKickoffPrompt() {
+        if (staged == null || kickoffPrompt.text.isBlank()) return
+        UiSupport.copyText(kickoffPrompt.text)
+        UiSupport.notify(project, "Copilot prompt copied", "Paste this prompt after uploading the prepared files.")
+    }
+
+    private fun currentKickoffPrompt(context: ContextPack): String {
+        val skill = AppSettings.getInstance().skill(context.promptSkillId)
+        val template =
+            projectSettings.state.kickoffPromptTemplateOverride.ifBlank {
+                AppSettings.getInstance().state.kickoffPromptTemplate
+            }
+        return BatchKickoffPromptBuilder.build(
+            template,
+            context.sessionId,
+            selectionService.batchNumber(context.sessionId) ?: selectionService.nextBatchNumber().coerceAtLeast(1),
+            skill,
+        )
     }
 
     private fun openStaging() {
@@ -978,6 +1210,7 @@ class CopilotContextPanel(
         }
         invalidatePreparedBatch()
         externalRegistry.clear()
+        externalRegistry.startNewSession()
         selectionService.startNewSession()
         status.text = "New Copilot session started. Select files for batch 1."
         dragLabel.text = "Drag becomes available after preparation"
@@ -987,6 +1220,7 @@ class CopilotContextPanel(
     private fun invalidatePreparedBatch() {
         staged = null
         pack = null
+        kickoffPrompt.text = "Prepare the batch to generate the Copilot prompt."
         updateControls()
     }
 
@@ -1025,7 +1259,11 @@ class CopilotContextPanel(
         if (!calculating && !preparing) recalculate()
     }
 
-    private fun openSettings() = ShowSettingsUtil.getInstance().showSettingsDialog(project, ProjectSettingsConfigurable::class.java)
+    private fun openSettings() {
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, ProjectSettingsConfigurable::class.java)
+        invalidatePreparedBatch()
+        recalculate()
+    }
 
     private fun selectedBatchId() = (batchCombo.selectedItem as? String)?.substringBefore(" - ")
 
@@ -1138,6 +1376,8 @@ class CopilotContextPanel(
         copyAllTextButton.isEnabled = state.canUsePreparedFiles
         openButton.isEnabled = state.canUsePreparedFiles
         nextButton.isEnabled = state.canUsePreparedFiles
+        copyPromptButton.isEnabled = state.canUsePreparedFiles
+        kickoffPrompt.isEnabled = state.canUsePreparedFiles
         copyContextButtons.forEach { it.isEnabled = state.canCopyContext }
         newSessionButton.isEnabled = state.canStartNewSession
     }
@@ -1160,5 +1400,6 @@ class CopilotContextPanel(
     private enum class DetailMode {
         MORE,
         IMPORT,
+        PREVIEW,
     }
 }

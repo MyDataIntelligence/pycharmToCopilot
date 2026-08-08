@@ -23,7 +23,7 @@ class CopilotPatchParser {
         }
     }
 
-    fun parseJson(json: String): CopilotPatch = parseObject(JsonParser.parseString(json).asJsonObject, emptyMap())
+    fun parseJson(json: String): CopilotPatch = parseObject(JsonParser.parseString(json.removePrefix("\uFEFF")).asJsonObject, emptyMap())
 
     fun parseZip(bytes: ByteArray): CopilotPatch {
         val entries = linkedMapOf<String, ByteArray>()
@@ -48,8 +48,11 @@ class CopilotPatchParser {
         val snippets =
             entries
                 .filterKeys { it != "changes.json" }
-                .mapValues { (_, value) -> value.toString(StandardCharsets.UTF_8) }
-        return parseObject(JsonParser.parseString(changes.toString(StandardCharsets.UTF_8)).asJsonObject, snippets)
+                .mapValues { (_, value) -> value.toString(StandardCharsets.UTF_8).removePrefix("\uFEFF") }
+        return parseObject(
+            JsonParser.parseString(changes.toString(StandardCharsets.UTF_8).removePrefix("\uFEFF")).asJsonObject,
+            snippets,
+        )
     }
 
     private fun parseObject(
@@ -69,7 +72,7 @@ class CopilotPatchParser {
                 require(element.isJsonObject) { "Replacement $index must be an object." }
                 val item = element.asJsonObject
                 val operation = item.requiredString("operation")
-                require(operation in setOf("replace_function", "add_function", "add_file", "delete_file")) {
+                require(operation in setOf("replace_function", "add_function", "add_file", "replace_file", "delete_file")) {
                     "Unsupported operation: $operation"
                 }
                 val suppliedPath = item.requiredString("path")
@@ -99,7 +102,9 @@ class CopilotPatchParser {
                 }
                 val replacementText =
                     if (requiresContent) {
-                        embedded ?: snippets[reference] ?: error("Missing ZIP content: $reference")
+                        (embedded ?: snippets[reference] ?: error("Missing ZIP content: $reference"))
+                            .replace("\r\n", "\n")
+                            .replace('\r', '\n')
                     } else {
                         null
                     }
@@ -117,7 +122,7 @@ class CopilotPatchParser {
                         item.requiredString("qualifiedName")
                     }
                 val originalHash =
-                    if (operation in setOf("replace_function", "delete_file")) {
+                    if (operation in setOf("replace_function", "replace_file", "delete_file")) {
                         item.requiredString("originalHash").also(::requireSha256)
                     } else {
                         item.optionalString("originalHash")?.also {

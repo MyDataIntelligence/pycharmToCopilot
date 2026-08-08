@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:32.940Z" hostname="FERRON" time="2.83">
+  <properties/>
+  <testcase name="testChangedFileHashRequiresForceBeforeDelete" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.075"/>
+  <testcase name="testDeletesCompleteFileOnlyWhenExactHashMatches" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.084"/>
+  <testcase name="testReplacesCompleteDecoratedAsyncMethodAndNestedFunction" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.27"/>
+  <testcase name="testOptimizeImportsRunsOnlyWhenExplicitlyEnabled" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.374"/>
+  <testcase name="testRejectsInvalidPythonForNewFile" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.196"/>
+  <testcase name="testChangedHashRequiresExplicitForce" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.1"/>
+  <testcase name="testInvalidPatchCannotBypassValidationThroughApplyService" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.111"/>
+  <testcase name="testAddsNewClassMethodAtRequestedLocation" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.288"/>
+  <testcase name="testAddsCompletePythonFileAndSupportsUndo" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.242"/>
+  <testcase name="testAppliesMultipleFunctionsAcrossFilesAndPreservesUnselectedFunction" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.231"/>
+  <testcase name="testDeleteFileHashUsesExactSavedBytesInsteadOfNormalizedPsiText" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.18"/>
+  <testcase name="testReplacesOneFunctionAndPreservesSurroundingCode" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.237"/>
+  <testcase name="testOneUndoRestoresReplacementAdditionNewFileAndDeletionTogether" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.256"/>
+  <testcase name="testMultipleNewFunctionsSharingAnchorKeepPatchOrder" classname="nl.ferron.copilotcontextbridge.patch.PatchApplicationTest" time="0.184"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

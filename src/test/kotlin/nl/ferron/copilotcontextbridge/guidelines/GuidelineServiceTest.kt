@@ -77,6 +77,16 @@ class GuidelineServiceTest : BasePlatformTestCase() {
         assertTrue(merged.markdown.contains("Add tests."))
     }
 
+    fun testEffectiveGuidelinesAlwaysIncludeHardPythonAuthoringRules() {
+        val merged = GuidelineService(project).merge("Implement Python behavior", "")
+
+        assertTrue(merged.markdown.contains("## Plugin Python authoring rules"))
+        assertTrue(merged.markdown.contains("sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html"))
+        assertTrue(merged.markdown.contains("`Args:`"))
+        assertTrue(merged.markdown.contains("clear leading verb"))
+        assertTrue(merged.markdown.contains("Never record change history"))
+    }
+
     private fun addRepositoryFile(
         relativePath: String,
         text: String,

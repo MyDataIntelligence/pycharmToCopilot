@@ -20,6 +20,9 @@ class ReturnInstructionsTest : TestCase() {
         assertTrue(patch.contains("`changes.json` at the ZIP root is mandatory"))
         assertTrue(files.contains("`changes.json` manifest"))
         assertTrue(files.contains("Do not return a loose source-only ZIP"))
+        assertTrue(files.contains("`formatVersion`: 1"))
+        assertTrue(files.contains("`replace_file`"))
+        assertTrue(files.contains("exact-file `originalHash`"))
     }
 
     fun testEffectiveHierarchyUsesProjectOverrideAndThenPromptAddition() {
@@ -64,6 +67,21 @@ class ReturnInstructionsTest : TestCase() {
         val issues = ReturnInstructions.validate(CopilotReturnMode.TEXT_ONLY, "Incomplete")
 
         assertEquals(setOf("originalPath", "completeSource"), issues.map { it.requirement }.toSet())
+    }
+
+    fun testEachWarningCanRestoreOnlyItsOwnRequirement() {
+        CopilotReturnMode.entries.forEach { mode ->
+            val initial = ReturnInstructions.validate(mode, "Custom instructions")
+            initial.forEach { issue ->
+                val restored = ReturnInstructions.restoreRequirement(mode, "Custom instructions", issue.requirement)
+                val remaining = ReturnInstructions.validate(mode, restored)
+
+                assertFalse("$mode should restore ${issue.requirement}", remaining.any { it.requirement == issue.requirement })
+                if (initial.size > 1) {
+                    assertTrue("Restoring one warning must not silently reset all instructions", remaining.isNotEmpty())
+                }
+            }
+        }
     }
 
     fun testUnknownPersistedReturnModeFallsBackSafely() {

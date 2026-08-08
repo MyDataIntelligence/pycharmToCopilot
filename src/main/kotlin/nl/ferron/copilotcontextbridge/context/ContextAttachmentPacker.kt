@@ -4,17 +4,21 @@ import nl.ferron.copilotcontextbridge.model.AttachmentKind
 import nl.ferron.copilotcontextbridge.model.AttachmentPlan
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.PlannedAttachment
-import nl.ferron.copilotcontextbridge.model.RelationType
 import nl.ferron.copilotcontextbridge.model.sourceKey
 import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
 import nl.ferron.copilotcontextbridge.settings.CopilotTarget
 import nl.ferron.copilotcontextbridge.staging.StagedFilenameService
 import nl.ferron.copilotcontextbridge.staging.TextFileSupport
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 /** Builds a deterministic attachment plan; all originals remain traceable through the master index. */
 object ContextAttachmentPacker {
     const val DEFAULT_MAX_BUNDLE_BYTES = 80_000L
+    const val DEFAULT_MAX_BUNDLE_CHARACTERS = 80_000
+    const val DEFAULT_ESTIMATED_MAX_BUNDLE_TOKENS = 20_000
     const val DEFAULT_MAX_SOURCES_PER_BUNDLE = 15
+    private const val SECTION_OVERHEAD_CHARACTERS = 700L
 
     fun plan(
         candidates: Collection<ContextCandidate>,
@@ -114,18 +118,48 @@ object ContextAttachmentPacker {
                 .filter { it.bundleGroup == group && it.enabled }
                 .mapNotNull { it.parameters["maxBundleBytes"]?.toLongOrNull() }
                 .minOrNull() ?: DEFAULT_MAX_BUNDLE_BYTES
+        val maxCharacters =
+            minOf(
+                policy.maxBundleCharacters.takeIf { it > 0 } ?: DEFAULT_MAX_BUNDLE_CHARACTERS,
+                policy.rules
+                    .filter { it.bundleGroup == group && it.enabled }
+                    .mapNotNull { it.parameters["maxBundleCharacters"]?.toIntOrNull()?.takeIf { limit -> limit > 0 } }
+                    .minOrNull() ?: Int.MAX_VALUE,
+            ).toLong()
+        val maxTokens =
+            minOf(
+                policy.estimatedMaxBundleTokens.takeIf { it > 0 } ?: DEFAULT_ESTIMATED_MAX_BUNDLE_TOKENS,
+                policy.rules
+                    .filter { it.bundleGroup == group && it.enabled }
+                    .mapNotNull { it.parameters["estimatedMaxBundleTokens"]?.toIntOrNull()?.takeIf { limit -> limit > 0 } }
+                    .minOrNull() ?: Int.MAX_VALUE,
+            ).toLong()
         val chunks = mutableListOf<MutableList<ContextCandidate>>()
         var current = mutableListOf<ContextCandidate>()
-        var size = 0L
+        var bytes = 0L
+        var characters = 0L
         candidates.forEach { candidate ->
-            val estimated = candidate.size + 700L
-            if (current.isNotEmpty() && (current.size >= maxFiles || size + estimated > maxBytes)) {
+            val estimatedBytes = candidate.size + SECTION_OVERHEAD_CHARACTERS
+            val estimatedCharacters = estimatedCharacters(candidate) + SECTION_OVERHEAD_CHARACTERS
+            val prospectiveCharacters = characters + estimatedCharacters
+            val prospectiveTokens = (prospectiveCharacters + 3L) / 4L
+            if (
+                current.isNotEmpty() &&
+                (
+                    current.size >= maxFiles ||
+                        bytes + estimatedBytes > maxBytes ||
+                        prospectiveCharacters > maxCharacters ||
+                        prospectiveTokens > maxTokens
+                )
+            ) {
                 chunks += current
                 current = mutableListOf()
-                size = 0L
+                bytes = 0L
+                characters = 0L
             }
             current += candidate
-            size += estimated
+            bytes += estimatedBytes
+            characters += estimatedCharacters
         }
         if (current.isNotEmpty()) chunks += current
         return chunks
@@ -172,22 +206,16 @@ object ContextAttachmentPacker {
         return policy.rules.any { it.enabled && it.resolver == resolver && it.keepSeparate }
     }
 
-    private fun resolverFor(candidate: ContextCandidate): String =
-        when {
-            candidate.pinned -> "explicit.pinnedFiles"
-            candidate.relations.any { it.type == RelationType.RELATED_TEST } -> "python.matchingTests"
-            candidate.relations.any { it.type == RelationType.NEARBY_TEST } -> "tests.nearby"
-            candidate.relations.any { it.type == RelationType.TEST_FIXTURE } -> "tests.fixtures"
-            candidate.relations.any { it.type == RelationType.REFERENCED_CONFIGURATION } -> "text.referencedConfiguration"
-            candidate.relations.any { it.type == RelationType.TEMPLATE } -> "repository.templates"
-            candidate.relations.any { it.type == RelationType.SIMILAR_IMPLEMENTATION } -> "repository.similarImplementations"
-            candidate.relations.any { it.type == RelationType.INSTRUCTION } -> "guidelines.project"
-            candidate.relations.any { it.type == RelationType.DIRECT_IMPORT } -> "python.directImports"
-            candidate.relations.any { it.type == RelationType.DIRECT_CALLEE } -> "python.directCallees"
-            candidate.relations.any { it.type == RelationType.DIRECT_DEPENDENT } -> "python.directCallers"
-            candidate.relations.any { it.type == RelationType.SECOND_LEVEL } -> "python.transitiveImports"
-            else -> "repository.references"
-        }
+    private fun resolverFor(candidate: ContextCandidate): String = ContextResolverRegistry.primaryResolver(candidate)
+
+    private fun estimatedCharacters(candidate: ContextCandidate): Long =
+        runCatching {
+            if (Files.isRegularFile(candidate.absolutePath) && candidate.size <= DEFAULT_MAX_BUNDLE_BYTES * 20) {
+                Files.readString(candidate.absolutePath, StandardCharsets.UTF_8).length.toLong()
+            } else {
+                candidate.size
+            }
+        }.getOrDefault(candidate.size)
 
     private fun makeNamesUnique(attachments: List<PlannedAttachment>): List<PlannedAttachment> {
         val used = hashSetOf<String>()

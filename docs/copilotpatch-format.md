@@ -18,6 +18,10 @@ Requires `path`, `qualifiedName`, `parentQualifiedName`, and complete function s
 
 Requires a new repository-relative `path` and complete file content in `replacement` or `replacementFile`. `qualifiedName` may be omitted and is represented internally as `<file>`. The target must not already exist. Parent traversal, absolute paths and repository/symlink escape are rejected.
 
+### `replace_file`
+
+Requires an existing repository-relative `path`, its exported exact-file `originalHash`, and complete file content in `replacement` or `replacementFile`. It is intended for the `CODE_TOOL_FILES` return mode. The importer shows a whole-file diff, starts source-only fallback ZIPs unselected, rechecks the hash before Apply, and never silently overwrites local changes.
+
 ### `delete_file`
 
 Requires an existing repository-relative `path` and exported `originalHash`. It must not contain replacement content. The hash protects against deletion after local changes. Deletion is individually previewed and selected; it is never inferred from an omitted response.

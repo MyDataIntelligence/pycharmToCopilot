@@ -41,6 +41,8 @@ class ProjectSettingsConfigurable(
     private val optimize = JBCheckBox("Optimize imports after replacement")
     private val undo = JBCheckBox("One Undo operation for all replacements")
     private val customIgnores = JBTextArea(12, 60)
+    private val projectSecretPatterns = JBTextArea(10, 60)
+    private val kickoffPromptOverride = JBTextArea(12, 70)
     private val scores = JBTextArea(16, 60)
     private val postApplyCommand = JBTextField()
 
@@ -52,8 +54,8 @@ class ProjectSettingsConfigurable(
                 "Context selection",
                 scroll(
                     vertical(
-                        row("Maximum upload files (context included)", maximum),
-                        JLabel("One slot is always reserved for 00_REPO_CONTEXT.md."),
+                        row("Fallback physical attachment limit", maximum),
+                        JLabel("Prompt Context Policy may override this limit; 00_REPO_CONTEXT.md always uses one attachment."),
                         automaticFill,
                         directImports,
                         dependents,
@@ -78,10 +80,23 @@ class ProjectSettingsConfigurable(
                 ),
             )
             addTab(
+                "Copilot prompt",
+                labeled(
+                    "Project kickoff prompt override (leave blank to inherit global; placeholders: {sessionId}, {batchNumber}, {promptSkill})",
+                    JBScrollPane(kickoffPromptOverride),
+                ),
+            )
+            addTab(
                 "Security & ignores",
                 JPanel(BorderLayout(6, 6)).apply {
                     add(vertical(detectSecrets, blockSecrets), BorderLayout.NORTH)
-                    add(labeled("Additional project ignore patterns (one per line)", JBScrollPane(customIgnores)), BorderLayout.CENTER)
+                    add(
+                        JPanel(GridLayout(2, 1, 6, 6)).apply {
+                            add(labeled("Additional project ignore patterns (one per line)", JBScrollPane(customIgnores)))
+                            add(labeled("Additional project secret filename patterns (one per line)", JBScrollPane(projectSecretPatterns)))
+                        },
+                        BorderLayout.CENTER,
+                    )
                 },
             )
             addTab(
@@ -104,6 +119,11 @@ class ProjectSettingsConfigurable(
 
     override fun apply() {
         val parsedScores = parseScores(scores.text)
+        val kickoffOverride = kickoffPromptOverride.text.trim()
+        if (kickoffOverride.isNotBlank()) {
+            val kickoffErrors = KickoffPromptTemplateRenderer.validationErrors(kickoffOverride)
+            if (kickoffErrors.isNotEmpty()) throw ConfigurationException(kickoffErrors.joinToString("\n"))
+        }
         project.getService(ProjectSettings::class.java).state.apply {
             maximumUploadFiles = maximum.value as Int
             automaticallyFillDependencies = automaticFill.isSelected
@@ -125,6 +145,8 @@ class ProjectSettingsConfigurable(
             oneUndoOperation = undo.isSelected
             textualScanLimitBytes = (scanLimitKiB.value as Int).toLong() * 1024L
             customIgnorePatterns = lines(customIgnores.text).toMutableList()
+            projectSecretFilenamePatterns = lines(projectSecretPatterns.text).toMutableList()
+            kickoffPromptTemplateOverride = kickoffOverride
             postApplyCommand = this@ProjectSettingsConfigurable.postApplyCommand.text.trim()
             this.scores = parsedScores.toMutableMap()
         }
@@ -152,6 +174,8 @@ class ProjectSettingsConfigurable(
         undo.isSelected = state.oneUndoOperation
         scanLimitKiB.value = (state.textualScanLimitBytes / 1024L).toInt().coerceIn(64, 20 * 1024)
         customIgnores.text = state.customIgnorePatterns.joinToString("\n")
+        projectSecretPatterns.text = state.projectSecretFilenamePatterns.joinToString("\n")
+        kickoffPromptOverride.text = state.kickoffPromptTemplateOverride
         postApplyCommand.text = state.postApplyCommand
         scores.text = state.scores.entries.joinToString("\n") { "${it.key}=${it.value}" }
     }
@@ -178,6 +202,8 @@ class ProjectSettingsConfigurable(
             undo.isSelected,
             scanLimitKiB.value,
             lines(customIgnores.text),
+            lines(projectSecretPatterns.text),
+            kickoffPromptOverride.text.trim(),
             postApplyCommand.text.trim(),
             runCatching { parseScores(scores.text) }.getOrDefault(emptyMap()),
         )
@@ -204,6 +230,8 @@ class ProjectSettingsConfigurable(
             state.oneUndoOperation,
             (state.textualScanLimitBytes / 1024L).toInt(),
             state.customIgnorePatterns.toList(),
+            state.projectSecretFilenamePatterns.toList(),
+            state.kickoffPromptTemplateOverride,
             state.postApplyCommand,
             state.scores.toMap(),
         )

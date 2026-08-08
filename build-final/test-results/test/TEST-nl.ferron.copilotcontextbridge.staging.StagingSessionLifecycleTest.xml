@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.staging.StagingSessionLifecycleTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:37.631Z" hostname="FERRON" time="0.24">
+  <properties/>
+  <testcase name="testDeletionRejectsPathsOutsideStagingRoot" classname="nl.ferron.copilotcontextbridge.staging.StagingSessionLifecycleTest" time="0.058"/>
+  <testcase name="testKeepMarkerAndSafeSessionDeletion" classname="nl.ferron.copilotcontextbridge.staging.StagingSessionLifecycleTest" time="0.063"/>
+  <testcase name="testFailedStagingRemovesPartialSessionSoRetryIsNotBlocked" classname="nl.ferron.copilotcontextbridge.staging.StagingSessionLifecycleTest" time="0.062"/>
+  <testcase name="testCompleteContextOnlyPackCreatesManifestAndCanBeDeleted" classname="nl.ferron.copilotcontextbridge.staging.StagingSessionLifecycleTest" time="0.057"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

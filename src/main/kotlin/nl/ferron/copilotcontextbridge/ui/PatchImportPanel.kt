@@ -34,6 +34,7 @@ import javax.swing.Box
 import javax.swing.BoxLayout
 import javax.swing.JButton
 import javax.swing.JCheckBox
+import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingConstants
@@ -60,6 +61,7 @@ class PatchImportPanel(
     private var current: PatchValidator.Result? = null
     private val selections = mutableMapOf<String, JCheckBox>()
     private val forces = mutableMapOf<String, JCheckBox>()
+    private val proposedTexts = mutableMapOf<String, String>()
     private val diffFacade = JetBrainsDiffFacade(project)
     private val validationGeneration = AtomicLong()
 
@@ -68,15 +70,22 @@ class PatchImportPanel(
         val content =
             JPanel().apply {
                 layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                add(stepTitle("1. Drop .copilotpatch / JSON / ZIP"))
-                add(JLabel("Structured changes.json is preferred; a plain code ZIP is reviewed as a safe fallback."))
-                add(createInputPanel())
+                add(fullWidth(stepTitle("1. Drop .copilotpatch / JSON / ZIP")))
+                add(
+                    fullWidth(
+                        JLabel(
+                            "<html>Copilot ZIPs must contain <b>changes.json</b>.<br>" +
+                                "Source-only ZIPs require manual diff review and selection.</html>",
+                        ),
+                    ),
+                )
+                add(fullWidth(createInputPanel()))
                 add(Box.createVerticalStrut(JBUI.scale(9)))
-                add(stepTitle("2. Validation"))
-                add(validationCard())
+                add(fullWidth(stepTitle("2. Validation")))
+                add(fullWidth(validationCard()))
                 add(Box.createVerticalStrut(JBUI.scale(9)))
-                add(changesTitle.apply { font = font.deriveFont(Font.BOLD, font.size2D + 1f) })
-                add(createChangesPanel())
+                add(fullWidth(changesTitle.apply { font = font.deriveFont(Font.BOLD, font.size2D + 1f) }))
+                add(fullWidth(createChangesPanel(), growHeight = true))
             }
         add(content, BorderLayout.CENTER)
         applyButton.isEnabled = false
@@ -85,12 +94,13 @@ class PatchImportPanel(
     private fun createInputPanel(): JPanel {
         val drop =
             JLabel(
-                "<html><center><b>Drop Copilot result here</b><br><font color='#888888'>changes.json preferred · plain ZIP supported</font></center></html>",
+                "<html><center><b>Drop Copilot result here</b><br><font color='#888888'>changes.json required · source-only ZIP fallback supported</font></center></html>",
                 AllIcons.Nodes.Folder,
                 SwingConstants.CENTER,
             ).apply {
                 border = BorderFactory.createDashedBorder(JBColor.GRAY, 2f, 4f)
                 preferredSize = Dimension(JBUI.scale(360), JBUI.scale(94))
+                maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
                 transferHandler =
                     object : TransferHandler() {
                         override fun canImport(support: TransferSupport) = support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)
@@ -139,12 +149,18 @@ class PatchImportPanel(
             border = cardBorder()
             add(
                 JPanel(BorderLayout()).apply {
-                    add(JLabel("Review changes in PyCharm's native Diff viewer."), BorderLayout.CENTER)
+                    add(JLabel("Review every change in native Diff."), BorderLayout.CENTER)
                     add(JButton("View combined diff").apply { addActionListener { showCombinedDiff() } }, BorderLayout.EAST)
                 },
                 BorderLayout.NORTH,
             )
-            add(JBScrollPane(rows), BorderLayout.CENTER)
+            add(
+                JBScrollPane(rows).apply {
+                    horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+                    verticalScrollBarPolicy = JBScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                },
+                BorderLayout.CENTER,
+            )
             add(
                 JPanel().apply {
                     layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -220,6 +236,7 @@ class PatchImportPanel(
         rows.removeAll()
         selections.clear()
         forces.clear()
+        proposedTexts.clear()
         val validSchema = result.validation.errors.isEmpty()
         validation.text =
             if (validSchema) {
@@ -303,6 +320,8 @@ class PatchImportPanel(
         rows.add(
             JPanel(BorderLayout(5, 2)).apply {
                 border = JBUI.Borders.empty(4, 1)
+                alignmentX = LEFT_ALIGNMENT
+                maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(180))
                 add(
                     JPanel(BorderLayout()).apply {
                         isOpaque = false
@@ -320,7 +339,25 @@ class PatchImportPanel(
                                 foreground = JBColor.GRAY
                             },
                         )
-                        add(JLabel("<html>${escapeHtml(item.message)}</html>").apply { foreground = JBColor.GRAY })
+                        add(
+                            JBTextArea(item.message).apply {
+                                isEditable = false
+                                isFocusable = false
+                                isOpaque = false
+                                lineWrap = true
+                                wrapStyleWord = true
+                                foreground = JBColor.GRAY
+                                border = null
+                            },
+                        )
+                        if (item.request.operation == "delete_file") {
+                            add(
+                                JLabel("⚠ Deletes this project file on Apply; PyCharm Undo can restore it.").apply {
+                                    foreground = JBColor.RED
+                                    font = font.deriveFont(Font.BOLD)
+                                },
+                            )
+                        }
                     },
                     BorderLayout.CENTER,
                 )
@@ -328,8 +365,10 @@ class PatchImportPanel(
                 add(
                     JButton(if (item.status == ReplacementStatus.CHANGED) "Open 3-way diff" else "Open diff").apply {
                         addActionListener {
-                            diffFacade.showFunctionDiff(item) { include, useCopilot ->
+                            val reviewItem = item.copy(newText = proposedTexts[key] ?: item.newText)
+                            diffFacade.showFunctionDiff(reviewItem) { include, useCopilot, proposedText ->
                                 ApplicationManager.getApplication().invokeLater {
+                                    proposedTexts[key] = proposedText
                                     selected.isSelected = include
                                     force.isSelected = useCopilot
                                     updateApplyCaption()
@@ -382,7 +421,13 @@ class PatchImportPanel(
             )
             return
         }
-        diffFacade.showCombinedDiff(targets.map { it.validated })
+        diffFacade.showCombinedDiff(
+            targets.map { target ->
+                val item = target.validated
+                val key = "${item.request.path}::${item.request.qualifiedName}"
+                item.copy(newText = proposedTexts[key] ?: item.newText)
+            },
+        )
         diffTitle.text = "Combined diff — ${targets.size} replacement(s)"
     }
 
@@ -401,6 +446,7 @@ class PatchImportPanel(
         rows.removeAll()
         selections.clear()
         forces.clear()
+        proposedTexts.clear()
         diff.text = ""
         diffTitle.text = ""
         validation.text = "Schema  ·  Paths  ·  Functions  ·  Hashes"
@@ -413,7 +459,14 @@ class PatchImportPanel(
 
     private fun updateApplyCaption() {
         val amount = selections.values.count { it.isSelected }
-        applyButton.text = "Apply selected ($amount)"
+        val unresolved =
+            selections.keys.count { key ->
+                selections[key]?.isSelected == true && forces[key]?.isVisible == true && forces[key]?.isSelected != true
+            }
+        applyButton.text =
+            if (unresolved == 0) "Apply selected ($amount)" else "Apply selected ($amount) — resolve $unresolved conflict(s)"
+        applyButton.toolTipText =
+            if (unresolved == 0) null else "Apply is blocked until each selected conflict has an explicit resolution."
         applyButton.isEnabled = current?.validation?.errors?.isEmpty() == true && amount > 0
     }
 
@@ -462,7 +515,15 @@ class PatchImportPanel(
         selected: Set<String>,
         forced: Set<String>,
     ) {
-        val patch = reviewed.validation.patch ?: return
+        val originalPatch = reviewed.validation.patch ?: return
+        val patch =
+            originalPatch.copy(
+                replacements =
+                    originalPatch.replacements.map { request ->
+                        val key = "${request.path}::${request.qualifiedName}"
+                        proposedTexts[key]?.let { request.copy(replacement = it) } ?: request
+                    },
+            )
         val generation = validationGeneration.incrementAndGet()
         validation.text = "Revalidating paths, PSI targets and hashes before Apply…"
         object : Task.Backgroundable(project, "Revalidating Copilot changes", true) {
@@ -575,9 +636,16 @@ class PatchImportPanel(
 
     private fun stepTitle(text: String) = JLabel(text).apply { font = font.deriveFont(Font.BOLD, font.size2D + 1f) }
 
-    private fun cardBorder() = BorderFactory.createCompoundBorder(JBUI.Borders.customLine(JBColor.border(), 1), JBUI.Borders.empty(7))
+    private fun <T : JComponent> fullWidth(
+        component: T,
+        growHeight: Boolean = false,
+    ): T =
+        component.apply {
+            alignmentX = LEFT_ALIGNMENT
+            maximumSize = Dimension(Int.MAX_VALUE, if (growHeight) Int.MAX_VALUE else preferredSize.height)
+        }
 
-    private fun escapeHtml(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    private fun cardBorder() = BorderFactory.createCompoundBorder(JBUI.Borders.customLine(JBColor.border(), 1), JBUI.Borders.empty(7))
 
     private fun showError(message: String) {
         current = null

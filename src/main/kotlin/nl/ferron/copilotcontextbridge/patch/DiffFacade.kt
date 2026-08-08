@@ -6,6 +6,8 @@ import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.diff.util.DiffUserDataKeys
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.project.Project
 import com.jetbrains.python.PythonFileType
 
@@ -13,7 +15,7 @@ import com.jetbrains.python.PythonFileType
 interface DiffFacade {
     fun showFunctionDiff(
         replacement: ValidatedReplacement,
-        onSelectionChanged: (selected: Boolean, useCopilotForConflict: Boolean) -> Unit,
+        onSelectionChanged: (selected: Boolean, useCopilotForConflict: Boolean, proposedText: String) -> Unit,
     )
 
     fun showCombinedDiff(replacements: List<ValidatedReplacement>)
@@ -24,7 +26,7 @@ class JetBrainsDiffFacade(
 ) : DiffFacade {
     override fun showFunctionDiff(
         replacement: ValidatedReplacement,
-        onSelectionChanged: (Boolean, Boolean) -> Unit,
+        onSelectionChanged: (Boolean, Boolean, String) -> Unit,
     ) {
         val request = createRequest(replacement, onSelectionChanged)
         DiffManager.getInstance().showDiff(project, request)
@@ -48,9 +50,13 @@ class JetBrainsDiffFacade(
 
     internal fun createRequest(
         replacement: ValidatedReplacement,
-        onSelectionChanged: (Boolean, Boolean) -> Unit,
+        onSelectionChanged: (Boolean, Boolean, String) -> Unit,
     ): SimpleDiffRequest {
         val contentFactory = DiffContentFactory.getInstance()
+        // This document is deliberately not backed by a VirtualFile. Reviewers can refine the
+        // proposed result in Diff without touching the project; its text is only returned when an
+        // explicit include/use-Copilot action is chosen.
+        val proposedDocument = EditorFactory.getInstance().createDocument(replacement.newText)
         val title = "${replacement.request.path} :: ${replacement.request.qualifiedName}"
         val request =
             if (replacement.status == ReplacementStatus.CHANGED && replacement.baseText.isNotBlank()) {
@@ -58,7 +64,7 @@ class JetBrainsDiffFacade(
                     title,
                     contentFactory.create(project, replacement.baseText, PythonFileType.INSTANCE),
                     contentFactory.create(project, replacement.oldText, PythonFileType.INSTANCE),
-                    contentFactory.create(project, replacement.newText, PythonFileType.INSTANCE),
+                    contentFactory.create(project, proposedDocument, PythonFileType.INSTANCE),
                     "BASE (exported)",
                     "CURRENT (local)",
                     "PROPOSED (Copilot)",
@@ -67,24 +73,32 @@ class JetBrainsDiffFacade(
                 SimpleDiffRequest(
                     title,
                     contentFactory.create(project, replacement.oldText, PythonFileType.INSTANCE),
-                    contentFactory.create(project, replacement.newText, PythonFileType.INSTANCE),
+                    contentFactory.create(project, proposedDocument, PythonFileType.INSTANCE),
                     if (replacement.status == ReplacementStatus.NEW) "CURRENT (does not exist)" else "CURRENT",
                     "COPILOT PROPOSED",
                 )
             }
         val actions =
             mutableListOf<AnAction>(
-                selectionAction("Include in Apply") { onSelectionChanged(true, false) },
-                selectionAction("Exclude from Apply") { onSelectionChanged(false, false) },
+                selectionAction("Include proposed result in Apply") { onSelectionChanged(true, false, proposedDocument.text) },
+                selectionAction("Exclude from Apply") { onSelectionChanged(false, false, proposedDocument.text) },
             )
         if (replacement.status == ReplacementStatus.CHANGED) {
-            actions += selectionAction("Use Copilot version for this conflict") { onSelectionChanged(true, true) }
-            actions += selectionAction("Keep current version") { onSelectionChanged(false, false) }
+            actions += selectionAction("Resolve with proposed result") { onSelectionChanged(true, true, proposedDocument.text) }
+            actions += selectionAction("Keep current version") { onSelectionChanged(false, false, proposedDocument.text) }
         }
         request.putUserData(DiffUserDataKeys.CONTEXT_ACTIONS, actions)
-        request.putUserData(DiffUserDataKeys.FORCE_READ_ONLY, true)
+        request.putUserData(
+            DiffUserDataKeys.FORCE_READ_ONLY_CONTENTS,
+            if (request.contents.size == 3) booleanArrayOf(true, true, false) else booleanArrayOf(true, false),
+        )
         return request
     }
+
+    internal fun proposedDocument(request: SimpleDiffRequest): Document =
+        request.contents
+            .last()
+            .let { content -> (content as com.intellij.diff.contents.DocumentContent).document }
 
     private fun selectionAction(
         text: String,

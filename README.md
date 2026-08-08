@@ -31,9 +31,9 @@ Build toolchain: JDK 21, Gradle 9.5.0, Kotlin 2.1.20, IntelliJ Platform Gradle P
 ## Primary outbound workflow
 
 1. Multi-select files in Project View and choose **Copilot Context Bridge → Add to Copilot Context**, **Add with Dependencies**, or **Add with Prompt Skill**. Repeat from other folders; pinned paths persist together.
-2. In the tool window, verify **Files in this batch**, choose a Prompt Library entry, and review its Context Policy.
+2. In the tool window, use the wide **Pinned / Automatic** dropdown to inspect every represented file, choose a Prompt Library entry, and review its Context Policy. The list never collapses entries into a hidden “more” counter.
 3. Press the green **Prepare for Copilot** button. This creates a safe temporary pack and never changes repository files.
-4. Drag or copy the real staged attachments, or open the staging folder as the reliable fallback.
+4. Drag or copy the real staged attachments, then use **Copy prompt** to paste the generated kickoff message into Copilot. The message tells Copilot to read `00_REPO_CONTEXT.md` first and wait when more batches may follow.
 5. Start **Next batch** when more context is needed. History records what was prepared; a new conversation session excludes old batches from current-session reasoning.
 
 Directories are discovery roots, not upload items. **Add Repository Structure** includes the filtered tree without selecting every file. The plugin cannot prove that a browser accepted a drop, so history says “prepared”, not “uploaded”. The generated prompt says that another 20 files or more batches may follow and asks the user to confirm when the intended set is complete.
@@ -52,6 +52,8 @@ Every Prompt Library entry owns:
 - optional Return Instructions appended to the inherited mode contract.
 
 This avoids hardcoded prompt-specific `if` chains. Rules cover pinned files, matching and nearby tests, fixtures, direct imports/callers/callees, transitive imports, referenced configuration, `AGENTS.md`, Copilot instructions, project guidelines, similar implementations, templates and branch changes.
+
+The kickoff prompt shown directly below the prepared drag zone is editable globally under application settings and may be overridden per project. Templates require `00_REPO_CONTEXT.md` plus `{sessionId}`, `{batchNumber}`, and `{promptSkill}` so a custom prompt cannot accidentally lose batch identity. The top-level **Preview** page combines the full generated context with Included, Omitted, and Excluded file details.
 
 Built-ins include **General change**, **New reusable Python code**, **Debug problem**, **Create user story**, **Review code**, **Refactor selected code**, documentation, generated tests, architecture, branch-to-PR preparation, repository-to-user-story analysis, **Skill Creator**, **Slash Command Creator**, and **AGENTS.md Creator**. Creator prompts target GitHub Copilot direct editing where appropriate. Entries and their policies can be added, duplicated, edited, imported, exported or reset.
 
@@ -85,6 +87,7 @@ The Import page accepts `.copilotpatch`, matching JSON, or ZIP by drop, file pic
 - `replace_function`: replace one complete top-level, method, async, decorated or unambiguous nested Python function;
 - `add_function`: insert one complete function at a validated module/parent/anchor;
 - `add_file`: create one complete new file at a safe repository-relative path;
+- `replace_file`: replace one complete existing file after exact-file hash validation and whole-file diff review;
 - `delete_file`: delete one existing file after path and exported-hash validation.
 
 Validation covers schema, repository/session identity, traversal/absolute/symlink paths, target type, Python syntax, qualified names, parent and anchor identity, decorators, sync/async compatibility, hashes and overlapping changes. Native PyCharm diff views show each operation; conflicts can show `BASE (exported)`, `CURRENT (local)` and `PROPOSED (Copilot)`. Safe operations can be selected individually. Conflicts require an explicit keep-current/use-Copilot decision or Force Replace.
@@ -104,6 +107,10 @@ See [context format](docs/context-format.md), [patch format](docs/copilotpatch-f
 ```
 
 CI uses JDK 21, dependency caching, tests/static checks, Plugin Verifier and uploads the built ZIP. It does not publish to Marketplace.
+
+## JetBrains Marketplace package
+
+`buildPlugin` creates the upload-ready ZIP in `build/distributions/`. Marketplace copy, first-run instructions, tags and media guidance are maintained in [docs/marketplace/listing.md](docs/marketplace/listing.md); the manual review and publication steps are in [docs/marketplace/publishing-checklist.md](docs/marketplace/publishing-checklist.md). The distribution includes an original 40 x 40 bridge logo for light and dark IDE themes. Publishing remains manual and no Marketplace token is stored in this repository.
 
 ## Security and honest limitations
 

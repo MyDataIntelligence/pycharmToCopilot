@@ -1,6 +1,7 @@
 package nl.ferron.copilotcontextbridge.patch
 
 import com.intellij.diff.util.DiffUserDataKeys
+import com.intellij.openapi.application.WriteAction
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 class DiffFacadeTest : BasePlatformTestCase() {
@@ -8,23 +9,38 @@ class DiffFacadeTest : BasePlatformTestCase() {
         val request =
             JetBrainsDiffFacade(project).createRequest(
                 replacement(ReplacementStatus.MATCH, base = ""),
-            ) { _, _ -> }
+            ) { _, _, _ -> }
 
         assertEquals(2, request.contents.size)
         assertEquals(listOf("CURRENT", "COPILOT PROPOSED"), request.contentTitles)
         assertEquals(2, request.getUserData(DiffUserDataKeys.CONTEXT_ACTIONS)?.size)
-        assertEquals(true, request.getUserData(DiffUserDataKeys.FORCE_READ_ONLY))
+        assertTrue(booleanArrayOf(true, false).contentEquals(request.getUserData(DiffUserDataKeys.FORCE_READ_ONLY_CONTENTS)))
     }
 
     fun testHashConflictUsesNativeBaseCurrentProposedThreeWayDiff() {
         val request =
             JetBrainsDiffFacade(project).createRequest(
                 replacement(ReplacementStatus.CHANGED, base = "def run():\n    return 0\n"),
-            ) { _, _ -> }
+            ) { _, _, _ -> }
 
         assertEquals(3, request.contents.size)
         assertEquals(listOf("BASE (exported)", "CURRENT (local)", "PROPOSED (Copilot)"), request.contentTitles)
         assertEquals(4, request.getUserData(DiffUserDataKeys.CONTEXT_ACTIONS)?.size)
+        assertTrue(booleanArrayOf(true, true, false).contentEquals(request.getUserData(DiffUserDataKeys.FORCE_READ_ONLY_CONTENTS)))
+    }
+
+    fun testProposedResultUsesAnInMemoryEditableDocument() {
+        val facade = JetBrainsDiffFacade(project)
+        val request =
+            facade.createRequest(
+                replacement(ReplacementStatus.MATCH, base = ""),
+            ) { _, _, _ -> }
+
+        val proposed = facade.proposedDocument(request)
+        WriteAction.run<RuntimeException> { proposed.setText("def run():\n    return 99\n") }
+
+        assertEquals("def run():\n    return 99\n", proposed.text)
+        assertEquals("def run():\n    return 1\n", (request.contents.first() as com.intellij.diff.contents.DocumentContent).document.text)
     }
 
     private fun replacement(

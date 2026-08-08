@@ -128,6 +128,7 @@ class PatchApplicationTest : BasePlatformTestCase() {
             ReplacementStatus.CHANGED,
             validated.status,
         )
+        assertTrue("Structured conflicts start selected so Apply can report the unresolved decision", validated.selected)
         val key = "module.py::work"
         val skipped = PythonFunctionReplacementService(project).apply(validation, setOf(key), emptySet())
         assertEmpty(skipped.applied)

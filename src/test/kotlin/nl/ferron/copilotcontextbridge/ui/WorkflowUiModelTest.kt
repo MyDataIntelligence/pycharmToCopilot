@@ -44,11 +44,17 @@ class WorkflowUiModelTest : TestCase() {
 
     fun testMoreWorkspaceOrderIsStableAndKeepsImportOutOfMore() {
         assertEquals(
-            listOf("Context files", "Context preview", "Guidelines", "Prompt skills", "Return instructions", "Settings"),
+            listOf("Guidelines", "Prompt skills", "Return instructions", "Settings"),
             MoreWorkspaceModel.destinations.map { it.title },
         )
-        assertEquals(listOf(1, 2, 3, 4, 5, null), MoreWorkspaceModel.destinations.map { it.tabIndex })
+        assertEquals(listOf(1, 2, 3, null), MoreWorkspaceModel.destinations.map { it.tabIndex })
         assertEquals(listOf("Copy context", "Copy return instructions"), MoreWorkspaceModel.quickActions)
         assertFalse(MoreWorkspaceModel.destinations.any { it.title.contains("Import", ignoreCase = true) })
+        assertFalse(MoreWorkspaceModel.destinations.any { it.title.contains("Context", ignoreCase = true) })
+    }
+
+    fun testTopLevelNavigationAndPreviewSectionsHaveFixedOrder() {
+        assertEquals(listOf("Batch", "Import", "Preview", "More"), TopLevelNavigationModel.destinations)
+        assertEquals(listOf("Context preview", "Context files"), PreviewWorkspaceModel.sections)
     }
 }

@@ -118,16 +118,36 @@ class ContextFilesPanel(
             pack.selection.excluded,
         ) { candidate ->
             val scope =
-                when (candidate.relativePath) {
-                    in selection.alwaysExcludedPaths() -> "project"
-                    in selection.sessionExcludedPaths() -> "session"
-                    else -> "batch"
+                if (candidate.repositoryId.isNotBlank()) {
+                    externalSelection.exclusionScope(candidate.sourceKey)
+                } else {
+                    when (candidate.relativePath) {
+                        in selection.alwaysExcludedPaths() -> "project"
+                        in selection.sessionExcludedPaths() -> "session"
+                        else -> "batch"
+                    }
                 }
             candidateRow(
                 candidate,
                 "Excluded for this $scope · originally considered as ${primaryReason(candidate)}",
-                JButton("Include once").apply { addActionListener { selection.includeOnce(candidate.relativePath) } },
-                JButton("Remove exclusion").apply { addActionListener { selection.removePermanentExclusion(candidate.relativePath) } },
+                JButton("Include once").apply {
+                    addActionListener {
+                        if (candidate.repositoryId.isNotBlank()) {
+                            externalSelection.includeOnce(candidate.sourceKey)
+                        } else {
+                            selection.includeOnce(candidate.relativePath)
+                        }
+                    }
+                },
+                JButton("Remove exclusion").apply {
+                    addActionListener {
+                        if (candidate.repositoryId.isNotBlank()) {
+                            externalSelection.removeExclusion(candidate.sourceKey)
+                        } else {
+                            selection.removePermanentExclusion(candidate.relativePath)
+                        }
+                    }
+                },
             )
         }
         tabs.setTitleAt(0, "Included (${pack.selection.included.size})")
@@ -161,7 +181,8 @@ class ContextFilesPanel(
                 add(
                     JLabel(
                         "<html><font color='#888888'>$detail · priority ${candidate.score} · depth ${candidate.depth}<br>" +
-                            "${candidate.sha256}</font></html>",
+                            "resolver ${candidate.resolverId.ifBlank { "n/a" }} · " +
+                            "policy ${candidate.policyRuleId.ifBlank { "n/a" }}<br>${candidate.sha256}</font></html>",
                     ),
                     BorderLayout.CENTER,
                 )

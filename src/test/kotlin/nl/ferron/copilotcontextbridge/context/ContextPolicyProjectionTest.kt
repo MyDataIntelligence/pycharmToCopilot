@@ -52,4 +52,17 @@ class ContextPolicyProjectionTest : TestCase() {
         policy.previousBatchMode = PreviousBatchMode.NEVER.name
         assertFalse(ContextPolicyProjection.from(policy, fallback).avoidPrevious)
     }
+
+    fun testPolicyCopyPreservesPackingLimits() {
+        val policy =
+            ContextPolicyState.defaultFor("copy").apply {
+                maxBundleCharacters = 42_000
+                estimatedMaxBundleTokens = 10_500
+            }
+
+        val copied = policy.copyOf()
+
+        assertEquals(42_000, copied.maxBundleCharacters)
+        assertEquals(10_500, copied.estimatedMaxBundleTokens)
+    }
 }

@@ -69,6 +69,8 @@ object DevelopmentPromptLibrary {
 
             Rapporteer validatie exact als passed, warning, failed of not-run voor syntax, imports, formatting,
             lint, types en tests. Claim nooit dat een commando is uitgevoerd wanneer dat niet werkelijk is gebeurd.
+
+            ${Defaults.PYTHON_AUTHORING_RULES}
             """.trimIndent(),
             """
             - Geef herbruikbaarheid en bestaande repositorycomponenten voorrang boven duplicatie.
@@ -141,6 +143,8 @@ object DevelopmentPromptLibrary {
             - Callers/configuration reviewed: passed|warning|failed
             - Remaining risks: <items>
             Claim niets als uitgevoerd zonder daadwerkelijk resultaat.
+
+            ${Defaults.PYTHON_AUTHORING_RULES}
             """.trimIndent(),
             """
             - Reproduceer en bewijs de root cause voordat je de implementatie wijzigt.

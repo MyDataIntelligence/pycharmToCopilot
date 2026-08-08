@@ -83,6 +83,10 @@ object RepositoryReviewPrompt {
             geven; chat bevat alleen een korte telling per severity. Wanneer de gebruiker daarna expliciet fixes
             vraagt, lever je één `.copilotpatch`/ZIP met uitsluitend geselecteerde fixes, complete Pythonfuncties,
             oorspronkelijke hashes, regressietests en een change summary. Pas nooit stilzwijgend code toe.
+
+            Beoordeel Pythoncode bovendien expliciet tegen deze regels:
+
+            ${Defaults.PYTHON_AUTHORING_RULES}
             """.trimIndent(),
             """
             - Hergebruik eerst bestaande code, utilities, types, fixtures, templates en configuratie.
@@ -93,6 +97,7 @@ object RepositoryReviewPrompt {
             - Onderscheid defects, risks, guideline violations en suggestions met severity en confidence.
             - Review is read-only totdat de gebruiker expliciet vraagt geselecteerde fixes toe te passen.
             - Lever het reviewrapport als echt `CODE_REVIEW.md`-bestand via de Copilot code/file tool.
+            - Controleer Google-style Sphinx Napoleon-docstrings, verb-led functienamen en betekenisvolle variabele- en parameternamen expliciet.
             """.trimIndent(),
         )
 

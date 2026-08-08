@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:28.774Z" hostname="FERRON" time="0.01">
+  <properties/>
+  <testcase name="testSameRelativePathFromTwoRepositoriesRemainsSeparateAndTraceable" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.006"/>
+  <testcase name="testGlobalCharacterAndEstimatedTokenLimitsSplitWithoutSplittingAFile" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.001"/>
+  <testcase name="testBundleSplittingAndOrderingAreDeterministic" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.001"/>
+  <testcase name="testCategorySummaryCountsPhysicalAttachmentsAndRepositoryFiles" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.0"/>
+  <testcase name="testUnsupportedMicrosoftTextExtensionGetsTemporaryTxtNameButGitHubTargetDoesNot" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.0"/>
+  <testcase name="testPinnedFilesStaySeparateAndAutomaticFilesAreBundledAndTraceable" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.0"/>
+  <testcase name="testCalleeAndNearbyTestUseTheirOwnPackingRules" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.001"/>
+  <testcase name="testPinnedFilesDisplaceLowerPriorityAutomaticContextAtAttachmentLimit" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.0"/>
+  <testcase name="testPolicyCanKeepAnAutomaticResolverSeparate" classname="nl.ferron.copilotcontextbridge.context.ContextAttachmentPackerTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -8,6 +8,7 @@ import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import java.awt.BorderLayout
 import java.awt.GridLayout
+import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -19,6 +20,7 @@ class AppSettingsConfigurable : Configurable {
     private val guidelines = JBTextArea(22, 80)
     private val returnInstruction = JBTextArea(10, 80)
     private val combinedTextIntro = JBTextArea(8, 80)
+    private val kickoffPromptTemplate = JBTextArea(12, 80)
     private val ignorePatterns = JBTextArea(18, 70)
     private val secretPatterns = JBTextArea(18, 70)
     private val retention = JSpinner(SpinnerNumberModel(7, 1, 365, 1))
@@ -38,9 +40,10 @@ class AppSettingsConfigurable : Configurable {
             )
             addTab(
                 "Copilot output",
-                JPanel(GridLayout(2, 1, 8, 8)).apply {
+                JPanel(GridLayout(3, 1, 8, 8)).apply {
                     add(editor("Return-file instruction", returnInstruction))
                     add(editor("Complete-pack text introduction", combinedTextIntro))
+                    add(kickoffPromptEditor())
                 },
             )
             addTab("Global guidelines", editor("Global guidelines (Markdown)", guidelines))
@@ -55,6 +58,7 @@ class AppSettingsConfigurable : Configurable {
             guidelines.text != state.globalGuidelines ||
             returnInstruction.text != state.returnFileInstruction ||
             combinedTextIntro.text != state.combinedTextIntro ||
+            kickoffPromptTemplate.text != state.kickoffPromptTemplate ||
             lines(ignorePatterns.text) != state.ignorePatterns ||
             lines(secretPatterns.text) != state.secretFilenamePatterns ||
             retention.value != state.stagingRetentionDays
@@ -63,6 +67,8 @@ class AppSettingsConfigurable : Configurable {
     override fun apply() {
         if (question.text.isBlank()) throw ConfigurationException("Mandatory question cannot be empty.")
         if (returnInstruction.text.isBlank()) throw ConfigurationException("Return-file instruction cannot be empty.")
+        val kickoffErrors = KickoffPromptTemplateRenderer.validationErrors(kickoffPromptTemplate.text)
+        if (kickoffErrors.isNotEmpty()) throw ConfigurationException(kickoffErrors.joinToString("\n"))
         val ignores = lines(ignorePatterns.text)
         val secrets = lines(secretPatterns.text)
         if (ignores.isEmpty()) throw ConfigurationException("At least one repository ignore pattern is required.")
@@ -73,6 +79,7 @@ class AppSettingsConfigurable : Configurable {
             returnFileInstruction = returnInstruction.text.trim()
             returnInstructionsByMode[CopilotReturnMode.COPILOT_PATCH_FILE.name] = returnInstruction.text.trim()
             combinedTextIntro = this@AppSettingsConfigurable.combinedTextIntro.text.trim()
+            kickoffPromptTemplate = this@AppSettingsConfigurable.kickoffPromptTemplate.text.trim()
             ignorePatterns = ignores.toMutableList()
             secretFilenamePatterns = secrets.toMutableList()
             stagingRetentionDays = retention.value as Int
@@ -87,6 +94,7 @@ class AppSettingsConfigurable : Configurable {
             state.returnInstructionsByMode[CopilotReturnMode.COPILOT_PATCH_FILE.name]
                 ?: state.returnFileInstruction
         combinedTextIntro.text = state.combinedTextIntro
+        kickoffPromptTemplate.text = state.kickoffPromptTemplate
         ignorePatterns.text = state.ignorePatterns.joinToString("\n")
         secretPatterns.text = state.secretFilenamePatterns.joinToString("\n")
         retention.value = state.stagingRetentionDays
@@ -106,4 +114,24 @@ class AppSettingsConfigurable : Configurable {
         add(JLabel(title), BorderLayout.NORTH)
         add(JBScrollPane(area), BorderLayout.CENTER)
     }
+
+    private fun kickoffPromptEditor() =
+        JPanel(BorderLayout()).apply {
+            add(
+                JPanel(BorderLayout()).apply {
+                    add(
+                        JLabel("Kickoff prompt template ({sessionId}, {batchNumber}, {promptSkill})"),
+                        BorderLayout.CENTER,
+                    )
+                    add(
+                        JButton("Reset default").apply {
+                            addActionListener { kickoffPromptTemplate.text = Defaults.KICKOFF_PROMPT_TEMPLATE }
+                        },
+                        BorderLayout.EAST,
+                    )
+                },
+                BorderLayout.NORTH,
+            )
+            add(JBScrollPane(kickoffPromptTemplate), BorderLayout.CENTER)
+        }
 }

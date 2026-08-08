@@ -56,6 +56,13 @@ class ProjectSettings : PersistentStateComponent<ProjectSettings.Data> {
 
         @JvmField var customIgnorePatterns: MutableList<String> = mutableListOf()
 
+        @JvmField var projectSecretFilenamePatterns: MutableList<String> = mutableListOf()
+
+        /** Blank inherits the editable application-level kickoff prompt template. */
+        @JvmField var kickoffPromptTemplateOverride: String = ""
+
+        @JvmField var externalAlwaysExcludedSourceKeys: MutableList<String> = mutableListOf()
+
         @JvmField var postApplyCommand: String = ""
 
         /** Blank or absent values inherit the application-level default for that return mode. */

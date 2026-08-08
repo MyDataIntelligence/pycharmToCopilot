@@ -142,6 +142,26 @@ class ExternalRepositoryDropResolverTest : TestCase() {
         )
     }
 
+    fun testRegistrySupportsSessionAndIncludeOnceExclusions() {
+        val current = repository("current-exclusions")
+        val external = repository("external-exclusions")
+        val source = write(external, "src/client.py", "def client():\n    return 1\n")
+        val registry = ExternalRepositorySelectionRegistry()
+        val resolver = resolver(current)
+        registry.register(resolver.resolve(listOf(source)))
+        val sourceKey = registry.registeredSourceKeys().single()
+
+        registry.excludeForSession(sourceKey)
+        assertTrue(sourceKey in registry.excludedSourceKeys())
+        assertEquals("session", registry.exclusionScope(sourceKey))
+
+        registry.includeOnce(sourceKey)
+        assertFalse(sourceKey in registry.excludedSourceKeys())
+
+        registry.startNewSession()
+        assertFalse(sourceKey in registry.excludedSourceKeys())
+    }
+
     private fun resolver(
         current: Path,
         custom: List<String> = emptyList(),

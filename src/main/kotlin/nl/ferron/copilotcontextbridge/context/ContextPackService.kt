@@ -6,6 +6,7 @@ import com.intellij.openapi.project.Project
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.analysis.DependencyAnalyzer
 import nl.ferron.copilotcontextbridge.analysis.RepositoryScanner
+import nl.ferron.copilotcontextbridge.external.ExternalRepositoryContextAnalyzer
 import nl.ferron.copilotcontextbridge.external.ExternalRepositoryDropResolver
 import nl.ferron.copilotcontextbridge.external.ExternalRepositorySelectionRegistry
 import nl.ferron.copilotcontextbridge.guidelines.GuidelineService
@@ -65,7 +66,7 @@ class ContextPackService(
                 ProjectRoot.path(project),
                 app.state.ignorePatterns,
                 settings.customIgnorePatterns,
-                app.state.secretFilenamePatterns,
+                (app.state.secretFilenamePatterns + settings.projectSecretFilenamePatterns).distinct(),
                 settings.textualScanLimitBytes,
             )
         val externalCandidates =
@@ -98,15 +99,34 @@ class ContextPackService(
                                 )
                             }
                         }
-                    pinned + archive + discovered
+                    val analyzedDiscovery =
+                        ExternalRepositoryContextAnalyzer(policy, settings.textualScanLimitBytes).analyze(pinned, discovered)
+                    pinned + archive + analyzedDiscovery
                 }.distinctBy { it.sourceKey }
-        val allCandidates = analysis.candidates + externalCandidates
+        val allCandidates =
+            (analysis.candidates + externalCandidates).map { candidate ->
+                if (candidate.resolverId.isNotBlank() && candidate.policyRuleId.isNotBlank()) {
+                    candidate
+                } else {
+                    val primaryRule = ContextResolverRegistry.primaryRule(candidate, policy)
+                    candidate.copy(
+                        resolverId =
+                            candidate.resolverId.ifBlank {
+                                primaryRule?.resolver
+                                    ?: ContextResolverRegistry.primaryResolver(candidate, policy)
+                            },
+                        policyRuleId = candidate.policyRuleId.ifBlank { primaryRule?.id.orEmpty() },
+                    )
+                }
+            }
         val effectiveCandidates =
             allCandidates
                 .filter { candidate ->
-                    candidate.repositoryId.isNotBlank() ||
-                        candidate.pinned ||
-                        candidate.relativePath !in selectionService.excludedAutomaticPaths()
+                    if (candidate.repositoryId.isNotBlank()) {
+                        candidate.pinned || candidate.sourceKey !in externalRegistry.excludedSourceKeys()
+                    } else {
+                        candidate.pinned || candidate.relativePath !in selectionService.excludedAutomaticPaths()
+                    }
                 }.map { candidate ->
                     if (!settings.blockLikelySecrets) candidate.copy(secretWarning = null) else candidate
                 }.let { candidates ->
@@ -119,9 +139,12 @@ class ContextPackService(
         val excludedCandidates =
             allCandidates
                 .filter { candidate ->
-                    candidate.repositoryId.isBlank() &&
-                        !candidate.pinned &&
-                        candidate.relativePath in selectionService.excludedAutomaticPaths()
+                    !candidate.pinned &&
+                        if (candidate.repositoryId.isNotBlank()) {
+                            candidate.sourceKey in externalRegistry.excludedSourceKeys()
+                        } else {
+                            candidate.relativePath in selectionService.excludedAutomaticPaths()
+                        }
                 }.map { candidate -> candidate.copy(ignoredReason = "excluded by the user for this batch, session, or project") }
         val ranked = DependencyRanker.allocate(effectiveCandidates, policy.maxRepositoryFiles.coerceIn(1, 500), reserveContextFile = false)
         val sourceAttachmentLimit = projection.maximumFiles - if (gitContext == null) 0 else 1
@@ -264,6 +287,7 @@ class ContextPackService(
         candidate: nl.ferron.copilotcontextbridge.model.ContextCandidate,
         policy: nl.ferron.copilotcontextbridge.settings.ContextPolicyState,
     ): Boolean {
+        policy.rule(candidate.policyRuleId)?.let { return it.enabled && it.required }
         val requiredResolvers = policy.rules.filter { it.enabled && it.required }.mapTo(hashSetOf()) { it.resolver }
         return candidate.relations.any { relation -> relation.type.contextResolvers().any { it in requiredResolvers } }
     }

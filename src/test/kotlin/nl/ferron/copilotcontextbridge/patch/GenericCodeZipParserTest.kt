@@ -33,6 +33,17 @@ class GenericCodeZipParserTest {
         }
     }
 
+    @Test fun `utf8 bom is treated as an encoding marker instead of Python source`() {
+        val root = Files.createTempDirectory("ccb-generic-zip-")
+        try {
+            val patch = GenericCodeZipParser().parse(zipOf("new.py" to "\uFEFFdef created():\n    return 1\n"), root, "repo")
+
+            assertEquals("def created():\n    return 1\n", patch.replacements.single().replacement)
+        } finally {
+            Files.walk(root).sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
+        }
+    }
+
     @Test fun `unique basename is proposed but duplicate basename is rejected as ambiguous`() {
         val root = Files.createTempDirectory("ccb-generic-zip-")
         try {

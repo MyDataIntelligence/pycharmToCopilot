@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.settings.DevelopmentPromptLibraryTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:37.492Z" hostname="FERRON" time="0.005">
+  <properties/>
+  <testcase name="developmentPromptsContainRequiredWorkflowContracts" classname="nl.ferron.copilotcontextbridge.settings.DevelopmentPromptLibraryTest" time="0.001"/>
+  <testcase name="primaryDropdownEntriesFollowTheDeltaOrder" classname="nl.ferron.copilotcontextbridge.settings.DevelopmentPromptLibraryTest" time="0.001"/>
+  <testcase name="existingSettingsAreUpgradedAndReorderedWithoutLosingEdits" classname="nl.ferron.copilotcontextbridge.settings.DevelopmentPromptLibraryTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

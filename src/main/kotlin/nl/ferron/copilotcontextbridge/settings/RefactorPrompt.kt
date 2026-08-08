@@ -101,6 +101,8 @@ object RefactorPrompt {
             - extensibility check: concrete before/after change surface;
             - public behavior preserved: evidence or unresolved risk.
             Verzin geen commando's en claim nooit een uitgevoerde validatie zonder werkelijk resultaat.
+
+            ${Defaults.PYTHON_AUTHORING_RULES}
             """.trimIndent(),
             """
             - Onderzoek geselecteerde code én relevante scripts/utilities in andere folders vóór refactoring.
@@ -110,6 +112,7 @@ object RefactorPrompt {
             - Consolideer alleen aantoonbare duplicatie; voorkom premature abstractions en dumping-ground utilities.
             - Migreer callers en voeg behavior-locking regressietests toe voordat oude code wordt verwijderd.
             - Lever één echte patch/ZIP via de Copilot code/file tool met complete functies en refactor summary.
+            - Behoud of verbeter Google-style Sphinx Napoleon-docstrings, verb-led functienamen en betekenisvolle variabele- en parameternamen zonder wijzigingshistorie in docstrings.
             """.trimIndent(),
         )
 }

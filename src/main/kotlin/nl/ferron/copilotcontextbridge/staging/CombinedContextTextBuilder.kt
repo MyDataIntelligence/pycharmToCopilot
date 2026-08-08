@@ -8,11 +8,18 @@ object CombinedContextTextBuilder {
     fun build(
         introduction: String,
         files: List<StagedFile>,
+        kickoffPrompt: String = "",
     ): String =
         buildString {
             appendLine("# Complete Copilot context batch")
             appendLine()
             appendLine(introduction.trim())
+            if (kickoffPrompt.isNotBlank()) {
+                appendLine()
+                appendLine("## Prompt to paste into Copilot")
+                appendLine()
+                appendLine(kickoffPrompt.trim())
+            }
             appendLine()
             appendLine("Files in this text copy: ${files.size}")
             files.forEachIndexed { index, file ->

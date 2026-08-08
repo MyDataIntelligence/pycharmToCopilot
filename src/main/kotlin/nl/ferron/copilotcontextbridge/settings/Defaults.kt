@@ -3,6 +3,17 @@ package nl.ferron.copilotcontextbridge.settings
 object Defaults {
     const val FIRST_QUESTION = "Wat wil je precies bereiken met deze bestanden en welke wijziging wil je dat ik uitvoer?"
 
+    val KICKOFF_PROMPT_TEMPLATE =
+        """
+        Please read 00_REPO_CONTEXT.md first. It is the master index for this batch.
+        Then read every attached file listed in that context file.
+        Use the selected task instructions: {promptSkill}.
+        Use the original repository paths from 00_REPO_CONTEXT.md as file identities.
+        Follow the effective Return Instructions included in 00_REPO_CONTEXT.md.
+        This is batch {batchNumber} in session {sessionId}.
+        More batches may follow. Wait until I confirm that all batches are uploaded before final analysis or changes.
+        """.trimIndent()
+
     const val RETURN_FILE_INSTRUCTION =
         "Use your code/file-creation tool to create and attach a real downloadable file named " +
             "`copilot-result.copilotpatch` (JSON) or `copilot-result.zip`. Do not paste the patch or replacement code " +
@@ -12,6 +23,17 @@ object Defaults {
     const val COMBINED_TEXT_INTRO =
         "This is a complete text copy of one Copilot Context Bridge batch. Each section records the original " +
             "repository-relative path, staged filename, hash and selection reason before the exact supplied content."
+
+    val PYTHON_AUTHORING_RULES =
+        """
+        # Python naming and docstrings
+
+        - Write English Google-style docstrings that follow the Sphinx Napoleon example: https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html.
+        - Document the current functional contract with a concise summary and the applicable `Args:`, `Returns:`, `Yields:` and `Raises:` sections. Do not add empty or irrelevant sections.
+        - Keep docstrings purely functional. Never record change history or implementation commentary such as "changed because", "modified to", "updated so that", or similar wording.
+        - Name every function and method with a clear leading verb and a descriptive snake_case name that states its action and subject, for example `load_pipeline_config` or `validate_workspace_path`.
+        - Use meaningful, domain-specific names for variables and parameters. Avoid vague names such as `data`, `value`, `item`, `obj`, `tmp` or single-letter names unless their meaning is genuinely conventional and unambiguous in the local scope.
+        """.trimIndent()
 
     val ignorePatterns =
         listOf(
@@ -66,7 +88,11 @@ object Defaults {
         # Python style
 
         - Use type hints on function parameters and return values.
-        - Use Google-style docstrings in English.
+        - Write English Google-style docstrings following the Sphinx Napoleon example: https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html.
+        - Use `Args:`, `Returns:`, `Yields:` and `Raises:` exactly where applicable; omit sections that do not apply.
+        - Describe only the function's current behavior in a docstring. Never mention that code was changed, modified or updated, and never explain change history there.
+        - Start every function and method name with a clear verb and use a descriptive snake_case action name.
+        - Give variables and parameters meaningful domain-specific names; avoid vague names such as `data`, `value`, `item`, `obj` or `tmp` when a precise name is available.
         - Use dataclasses for structured results where appropriate.
         - Keep functions focused and reasonably bounded.
         - Use pathlib instead of manual string path construction where appropriate.

@@ -136,12 +136,53 @@ class ContextAttachmentPackerTest : TestCase() {
         assertEquals("robot-tests__src__config.py", plan.repositoryToAttachment["robot-tests::src/config.py"])
     }
 
+    fun testGlobalCharacterAndEstimatedTokenLimitsSplitWithoutSplittingAFile() {
+        val policy =
+            ContextPolicyState.defaultFor("limits").apply {
+                maxBundleCharacters = 1_500
+                estimatedMaxBundleTokens = 375
+            }
+        policy.rule("matching-tests")!!.maxFiles = 20
+        val candidates =
+            listOf(
+                candidate("tests/test_a.py", RelationType.RELATED_TEST, score = 1_700, size = 100),
+                candidate("tests/test_b.py", RelationType.RELATED_TEST, score = 1_600, size = 100),
+                candidate("tests/test_oversized.py", RelationType.RELATED_TEST, score = 1_500, size = 2_000),
+            )
+
+        val plan = ContextAttachmentPacker.plan(candidates, policy)
+        val bundles = plan.attachments.filter { it.kind == AttachmentKind.AUTOMATIC_BUNDLE }
+
+        assertEquals(3, bundles.size)
+        assertEquals(listOf("tests/test_oversized.py"), bundles.last().candidates.map { it.relativePath })
+    }
+
+    fun testCategorySummaryCountsPhysicalAttachmentsAndRepositoryFiles() {
+        val policy = ContextPolicyState.defaultFor("summary")
+        policy.rule("matching-tests")!!.maxFiles = 2
+        val plan =
+            ContextAttachmentPacker.plan(
+                listOf(
+                    candidate("src/main.py", pinned = true, score = 2_000),
+                    candidate("tests/test_a.py", RelationType.RELATED_TEST, score = 1_700),
+                    candidate("tests/test_b.py", RelationType.RELATED_TEST, score = 1_600),
+                    candidate("tests/test_c.py", RelationType.RELATED_TEST, score = 1_500),
+                ),
+                policy,
+            )
+
+        assertEquals(1, plan.categorySummary().single { it.bundleGroup == "pinned" }.repositoryFileCount)
+        assertEquals(2, plan.categorySummary().single { it.bundleGroup == "tests" }.attachmentCount)
+        assertEquals(3, plan.categorySummary().single { it.bundleGroup == "tests" }.repositoryFileCount)
+    }
+
     private fun candidate(
         path: String,
         relationType: RelationType? = null,
         pinned: Boolean = false,
         score: Int,
         repositoryId: String = "",
+        size: Long = 100,
     ): ContextCandidate {
         val relations =
             relationType
@@ -156,7 +197,7 @@ class ContextAttachmentPackerTest : TestCase() {
             confidence = RelationConfidence.CONFIRMED,
             relations = relations,
             pinned = pinned,
-            size = 100,
+            size = size,
             repositoryId = repositoryId,
             repositoryName = repositoryId,
         )

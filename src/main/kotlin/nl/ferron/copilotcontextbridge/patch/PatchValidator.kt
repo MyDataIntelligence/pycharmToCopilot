@@ -1,6 +1,7 @@
 package nl.ferron.copilotcontextbridge.patch
 
 import com.google.gson.JsonParser
+import com.intellij.openapi.fileTypes.PlainTextLanguage
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
@@ -192,7 +193,14 @@ class PatchValidator(
                     target
                 }
             }
-        return Result(PatchValidationResult(patch, adjusted.map { it.validated }, errors, warnings), adjusted)
+        val sourceOnlyZip = patch.sessionId.startsWith("generic-zip-")
+        val reviewReady =
+            adjusted.map { target ->
+                val status = target.validated.status
+                val selectable = status in setOf(ReplacementStatus.MATCH, ReplacementStatus.NEW, ReplacementStatus.CHANGED)
+                target.copy(validated = target.validated.copy(selected = selectable && !sourceOnlyZip))
+            }
+        return Result(PatchValidationResult(patch, reviewReady.map { it.validated }, errors, warnings), reviewReady)
     }
 
     private fun validateFileAddition(
@@ -214,7 +222,7 @@ class PatchValidator(
             PsiManager.getInstance(project).findDirectory(parentVf)
                 ?: error("Target parent is not a PSI directory.")
         val text = request.replacement ?: error("New file content is missing.")
-        val parsed = PsiFileFactory.getInstance(project).createFileFromText(relative.substringAfterLast('/'), text)
+        val parsed = parseWholeFile(relative.substringAfterLast('/'), text)
         val syntaxError = PsiTreeUtil.findChildOfType(parsed, PsiErrorElement::class.java)
         if (syntaxError != null) {
             return Target(
@@ -232,6 +240,9 @@ class PatchValidator(
                 newText = text,
                 newLineCount = text.lines().size,
                 unifiedDiff = UnifiedDiff.create(relative, "", text),
+                // A source-only ZIP has no trustworthy manifest. Even a safe new file must be
+                // explicitly selected after the user has reviewed its destination and diff.
+                selected = !request.replacementFile.orEmpty().startsWith("archive:"),
             )
         return Target(validated, null, null, file = parsed, fileParent = parentDirectory, fileOperationReady = true)
     }
@@ -241,7 +252,7 @@ class PatchValidator(
         file: com.intellij.psi.PsiFile,
     ): Target {
         val text = request.replacement ?: error("Replacement file content is missing.")
-        val parsed = PsiFileFactory.getInstance(project).createFileFromText(request.path.substringAfterLast('/'), text)
+        val parsed = parseWholeFile(request.path.substringAfterLast('/'), text)
         val syntaxError = PsiTreeUtil.findChildOfType(parsed, PsiErrorElement::class.java)
         if (syntaxError != null && request.path.endsWith(".py", true)) {
             return Target(
@@ -299,6 +310,19 @@ class PatchValidator(
             )
         return Target(validated, null, null, file = file, fileOperationReady = true)
     }
+
+    private fun parseWholeFile(
+        fileName: String,
+        text: String,
+    ): com.intellij.psi.PsiFile =
+        if (fileName.endsWith(".py", ignoreCase = true)) {
+            PsiFileFactory.getInstance(project).createFileFromText(fileName, PythonFileType.INSTANCE, text)
+        } else {
+            // PowerShell, batch, Robot Framework and other unsupported-but-textual extensions may be
+            // classified as binary by an IDE file type. Import reviews them as plain text instead of
+            // inventing a 0-line binary operation. GenericCodeZipParser has already rejected real binary bytes.
+            PsiFileFactory.getInstance(project).createFileFromText(fileName, PlainTextLanguage.INSTANCE, text)
+        }
 
     private fun resolveProjectFile(
         root: Path,

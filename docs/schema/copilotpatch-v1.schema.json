@@ -49,7 +49,7 @@
       "type": "object",
       "required": ["operation", "path"],
       "properties": {
-        "operation": { "enum": ["replace_function", "add_function", "add_file", "delete_file"] },
+        "operation": { "enum": ["replace_function", "add_function", "add_file", "replace_file", "delete_file"] },
         "path": { "$ref": "#/$defs/path" },
         "qualifiedName": { "type": "string", "minLength": 1 },
         "originalHash": { "$ref": "#/$defs/hash" },
@@ -79,6 +79,11 @@
             },
             {
               "properties": { "operation": { "const": "add_file" } },
+              "$ref": "#/$defs/content"
+            },
+            {
+              "properties": { "operation": { "const": "replace_file" } },
+              "required": ["originalHash"],
               "$ref": "#/$defs/content"
             },
             {

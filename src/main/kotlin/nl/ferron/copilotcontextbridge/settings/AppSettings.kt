@@ -62,6 +62,8 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
 
         @JvmField var combinedTextIntro: String = Defaults.COMBINED_TEXT_INTRO
 
+        @JvmField var kickoffPromptTemplate: String = Defaults.KICKOFF_PROMPT_TEMPLATE
+
         @JvmField var promptSkills: MutableList<PromptSkillState> = defaultPromptSkills().toMutableList()
     }
 
@@ -108,6 +110,9 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
         data.promptSkills = (orderedBuiltIns + customSkills).toMutableList()
         if (data.returnFileInstruction.isBlank()) data.returnFileInstruction = Defaults.RETURN_FILE_INSTRUCTION
         if (data.combinedTextIntro.isBlank()) data.combinedTextIntro = Defaults.COMBINED_TEXT_INTRO
+        if (KickoffPromptTemplateRenderer.validationErrors(data.kickoffPromptTemplate).isNotEmpty()) {
+            data.kickoffPromptTemplate = Defaults.KICKOFF_PROMPT_TEMPLATE
+        }
         if (data.ignorePatterns.isEmpty()) data.ignorePatterns.addAll(Defaults.ignorePatterns)
         if (data.secretFilenamePatterns.isEmpty()) data.secretFilenamePatterns.addAll(Defaults.secretPatterns)
         data.stagingRetentionDays = data.stagingRetentionDays.coerceIn(1, 365)
@@ -133,8 +138,12 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
                         "general-change",
                         "General change",
                         "Make a focused code change after clarifying the goal.",
-                        "After the user explains the goal, make the smallest safe change and return only modified functions in the required patch format.",
-                        "Preserve unrelated behavior and follow repository conventions. Validate callers, tests and configuration before changing public behavior.",
+                        """After the user explains the goal, make the smallest safe change and return only modified functions in the required patch format.
+
+${Defaults.PYTHON_AUTHORING_RULES}""",
+                        """Preserve unrelated behavior and follow repository conventions. Validate callers, tests and configuration before changing public behavior.
+
+${Defaults.PYTHON_AUTHORING_RULES}""",
                     ),
                 )
                 add(DevelopmentPromptLibrary.skills().first { it.id == DevelopmentPromptLibrary.FIX_ISSUE_ID })
@@ -143,8 +152,12 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
                         "write-tests",
                         "Generate tests",
                         "Add focused regression coverage.",
-                        "After clarification, design and implement focused tests for the requested behavior. Reuse existing test conventions and mock external boundaries.",
-                        "Cover happy path, failure path, boundary cases and regressions without depending on live external services.",
+                        """After clarification, design and implement focused tests for the requested behavior. Reuse existing test conventions and mock external boundaries.
+
+${Defaults.PYTHON_AUTHORING_RULES}""",
+                        """Cover happy path, failure path, boundary cases and regressions without depending on live external services.
+
+${Defaults.PYTHON_AUTHORING_RULES}""",
                     ),
                 )
                 add(RepositoryReviewPrompt.skill())

@@ -82,9 +82,9 @@ class ContextSelectionServiceTest : BasePlatformTestCase() {
         val service = project.getService(ContextSelectionService::class.java)
         service.markExported("session-1", "General change", listOf("src/main.py"), false)
 
-        assertEquals("PREPARED", service.batches().single().status)
+        assertEquals("PREPARED", service.batches().first { it.sessionId == "session-1" }.status)
         service.markHandedOff("session-1")
-        assertEquals("HANDED_OFF", service.batches().single().status)
+        assertEquals("HANDED_OFF", service.batches().first { it.sessionId == "session-1" }.status)
     }
 
     fun testUnsafeRelativePathsAreNeverPersisted() {

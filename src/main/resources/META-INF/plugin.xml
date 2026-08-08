@@ -1,16 +1,27 @@
-<idea-plugin>
+<idea-plugin url="https://github.com/MyDataIntelligence/pycharmToCopilot">
     <id>nl.ferron.copilot-context-bridge</id>
     <name>Copilot Context Bridge</name>
     <vendor url="https://github.com/MyDataIntelligence/pycharmToCopilot">MyDataIntelligence</vendor>
 
     <description><![CDATA[
-      <p>Safely export repository context to Microsoft 365 Copilot and import complete Python function replacements.</p>
-      <p>Includes dependency discovery, batch-aware staging, coding guidelines, secret protection, patch validation, diff preview, and undoable PSI replacements.</p>
+      <p>Prepare repository-aware context for Microsoft 365 Copilot and safely review the returned code in PyCharm.</p>
+      <ul>
+        <li>Build deterministic, multi-batch context packs with dependency, test, configuration, and guideline discovery.</li>
+        <li>Drag or copy staged attachments while preserving every original repository-relative path.</li>
+        <li>Use editable prompt skills, context policies, kickoff prompts, and return instructions.</li>
+        <li>Import versioned patches or source ZIPs through native diffs, conflict checks, and undoable PSI changes.</li>
+        <li>Reject unsafe paths and warn before likely secrets or destructive file operations are included.</li>
+      </ul>
+      <p>No browser automation or undocumented Copilot API is used; the staging folder remains the reliable cross-platform fallback.</p>
     ]]></description>
 
     <change-notes><![CDATA[
       <h3>1.0.0</h3>
-      <ul><li>Initial release.</li></ul>
+      <ul>
+        <li>Repository-aware outbound context selection, dependency ranking, packing, and multi-batch staging.</li>
+        <li>Editable prompt library, context policies, coding guidelines, kickoff prompts, and return contracts.</li>
+        <li>Safe structured and source-ZIP import with native diff review, conflict handling, and Undo support.</li>
+      </ul>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>

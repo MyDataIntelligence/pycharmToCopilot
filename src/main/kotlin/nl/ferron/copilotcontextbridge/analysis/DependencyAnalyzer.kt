@@ -7,6 +7,8 @@ import com.intellij.psi.PsiRecursiveElementWalkingVisitor
 import com.jetbrains.python.psi.PyFile
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.context.ContextPolicyProjection
+import nl.ferron.copilotcontextbridge.context.ContextResolverRegistry
+import nl.ferron.copilotcontextbridge.context.ResolverStrategy
 import nl.ferron.copilotcontextbridge.context.contextResolvers
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.DependencyRelation
@@ -126,7 +128,7 @@ class DependencyAnalyzer(
         }
         addTestRelations(snapshot, relations)
 
-        val secretDetector = SecretDetector(app.secretFilenamePatterns)
+        val secretDetector = SecretDetector((app.secretFilenamePatterns + settings.projectSecretFilenamePatterns).distinct())
         val candidates = mutableListOf<ContextCandidate>()
         val candidatePaths = linkedSetOf<String>().apply { addAll(seedPaths) }
         val candidateDepths =
@@ -188,6 +190,32 @@ class DependencyAnalyzer(
                         "unsupported or binary file",
                         null,
                         depth = candidateDepths[relative] ?: 0,
+                        resolverId =
+                            if (relative in
+                                pinned
+                            ) {
+                                "explicit.pinnedFiles"
+                            } else if (relative in additionalSeedPaths) {
+                                "git.branchChanges"
+                            } else {
+                                ""
+                            },
+                        policyRuleId =
+                            when (relative) {
+                                in pinned ->
+                                    policy
+                                        ?.rules
+                                        ?.firstOrNull { it.enabled && it.resolver == "explicit.pinnedFiles" }
+                                        ?.id
+                                        .orEmpty()
+                                in additionalSeedPaths ->
+                                    policy
+                                        ?.rules
+                                        ?.firstOrNull { it.enabled && it.resolver == "git.branchChanges" }
+                                        ?.id
+                                        .orEmpty()
+                                else -> ""
+                            },
                     )
                 return@forEach
             }
@@ -231,7 +259,28 @@ class DependencyAnalyzer(
                 } else {
                     null
                 }
-            candidates += baseCandidate(entry, pinned, sent, relevant, score, ignored, secret, generated, candidateDepths[relative] ?: 0)
+            val resolverIds = relationType.contextResolvers()
+            val primaryRule =
+                policy
+                    ?.rules
+                    ?.filter { it.enabled && it.resolver in resolverIds }
+                    ?.maxWithOrNull(
+                        compareBy<nl.ferron.copilotcontextbridge.settings.ContextRuleState> { it.priority }.thenByDescending { it.id },
+                    )
+            candidates +=
+                baseCandidate(
+                    entry,
+                    pinned,
+                    sent,
+                    relevant,
+                    score,
+                    ignored,
+                    secret,
+                    generated,
+                    candidateDepths[relative] ?: 0,
+                    resolverId = primaryRule?.resolver ?: resolverIds.firstOrNull().orEmpty(),
+                    policyRuleId = primaryRule?.id.orEmpty(),
+                )
         }
 
         return Result(snapshot, scanner.renderTree(snapshot, root.fileName.toString()), candidates, relations.distinct(), symbols, warnings)
@@ -246,6 +295,14 @@ class DependencyAnalyzer(
         symbols: Map<String, List<nl.ferron.copilotcontextbridge.model.PythonSymbol>>,
     ) {
         val activePolicy = policy ?: return
+        val rulesByStrategy =
+            activePolicy.rules
+                .asSequence()
+                .filter { it.enabled }
+                .mapNotNull { rule -> ContextResolverRegistry.find(rule.resolver)?.let { it.strategy to rule } }
+                .groupBy({ it.first }, { it.second })
+
+        fun firstRule(strategy: ResolverStrategy) = rulesByStrategy[strategy].orEmpty().maxByOrNull { it.priority }
 
         fun include(
             source: String,
@@ -258,7 +315,7 @@ class DependencyAnalyzer(
             relations += DependencyRelation(source, target, type, RelationConfidence.INFERRED, evidence = evidence)
         }
 
-        activePolicy.rules.firstOrNull { it.enabled && it.resolver == "tests.fixtures" }?.let { rule ->
+        firstRule(ResolverStrategy.TEST_FIXTURES)?.let { rule ->
             val tests = candidatePaths.filter { it.substringAfterLast('/').startsWith("test_") || "/tests/" in "/$it" }
             val fixtures =
                 snapshot.files
@@ -274,7 +331,7 @@ class DependencyAnalyzer(
             }
         }
 
-        activePolicy.rules.firstOrNull { it.enabled && it.resolver == "tests.nearby" }?.let { rule ->
+        firstRule(ResolverStrategy.NEARBY_TESTS)?.let { rule ->
             val matchingTests =
                 relations
                     .filter { it.type == RelationType.RELATED_TEST && (it.from in seedPaths || it.to in seedPaths) }
@@ -298,7 +355,7 @@ class DependencyAnalyzer(
                 }
         }
 
-        activePolicy.rules.firstOrNull { it.enabled && it.resolver == "repository.templates" }?.let { rule ->
+        firstRule(ResolverStrategy.TEMPLATES)?.let { rule ->
             val extensions = seedPaths.map { it.substringAfterLast('.', "").lowercase() }.filter(String::isNotBlank).toSet()
             snapshot.files
                 .filter { entry ->
@@ -312,7 +369,7 @@ class DependencyAnalyzer(
                 }
         }
 
-        activePolicy.rules.firstOrNull { it.enabled && it.resolver == "repository.similarImplementations" }?.let { rule ->
+        firstRule(ResolverStrategy.SIMILAR_IMPLEMENTATIONS)?.let { rule ->
             val seedSymbols = seedPaths.flatMap { path -> symbols[path].orEmpty() }.map { it.qualifiedName.substringAfterLast('.') }.toSet()
             symbols.entries
                 .asSequence()
@@ -329,10 +386,7 @@ class DependencyAnalyzer(
                 }
         }
 
-        val instructionResolvers =
-            activePolicy.rules.filter {
-                it.enabled && it.resolver in setOf("guidelines.agents", "guidelines.copilotInstructions", "guidelines.project")
-            }
+        val instructionResolvers = rulesByStrategy[ResolverStrategy.GUIDELINES].orEmpty()
         if (instructionResolvers.isNotEmpty()) {
             val instructionPaths =
                 snapshot.files
@@ -366,6 +420,8 @@ class DependencyAnalyzer(
         secret: String?,
         generated: Boolean = false,
         depth: Int = 0,
+        resolverId: String = "",
+        policyRuleId: String = "",
     ) = ContextCandidate(
         entry.relativePath,
         entry.path,
@@ -380,6 +436,8 @@ class DependencyAnalyzer(
         previouslySent = entry.relativePath in sent,
         size = entry.size,
         sha256 = sha256(entry.path),
+        resolverId = resolverId,
+        policyRuleId = policyRuleId,
     )
 
     private fun sha256(path: Path): String =
@@ -412,27 +470,28 @@ class DependencyAnalyzer(
                     it.relativePath.contains("/tests/") ||
                     it.relativePath.startsWith("tests/")
             }.forEach { test ->
-                val stem =
-                    test.relativePath
-                        .substringAfterLast('/')
-                        .removePrefix("test_")
-                        .removeSuffix("_test.py")
-                        .removeSuffix(".py")
                 python
-                    .filter { candidate ->
-                        candidate != test && candidate.relativePath.substringAfterLast('/').removeSuffix(".py") == stem
-                    }.forEach { production ->
+                    .asSequence()
+                    .filter { candidate -> candidate != test && !isTestPath(candidate.relativePath) }
+                    .map { production -> production to TestFileMatcher.score(test.relativePath, production.relativePath) }
+                    .filter { (_, score) -> score >= 72 }
+                    .sortedWith(compareByDescending<Pair<RepositoryScanner.Entry, Int>> { it.second }.thenBy { it.first.relativePath })
+                    .take(MAX_FUZZY_TEST_MATCHES)
+                    .forEach { (production, score) ->
                         relations +=
                             DependencyRelation(
                                 test.relativePath,
                                 production.relativePath,
                                 RelationType.RELATED_TEST,
-                                RelationConfidence.INFERRED,
-                                evidence = "test filename convention",
+                                if (score == 100) RelationConfidence.CONFIRMED else RelationConfidence.INFERRED,
+                                evidence = if (score == 100) "test filename convention" else "fuzzy test filename match ($score%)",
                             )
                     }
             }
     }
+
+    private fun isTestPath(path: String): Boolean =
+        path.substringAfterLast('/').startsWith("test_") || path.substringBeforeLast('.').endsWith("_test") || "/tests/" in "/$path"
 
     private fun addTextRelations(
         snapshot: RepositoryScanner.Snapshot,
@@ -516,4 +575,8 @@ class DependencyAnalyzer(
         }
 
     private fun readText(path: Path): String? = runCatching { Files.readString(path, StandardCharsets.UTF_8) }.getOrNull()
+
+    companion object {
+        private const val MAX_FUZZY_TEST_MATCHES = 3
+    }
 }

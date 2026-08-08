@@ -255,6 +255,10 @@ class ContextSelectionService(
 
     fun activeConversationSessionId(): String = data.activeConversationSessionId
 
+    fun nextBatchNumber(): Int = data.nextBatchNumber
+
+    fun batchNumber(sessionId: String): Int? = data.batches.firstOrNull { it.sessionId == sessionId }?.batchNumber
+
     fun markExported(
         sessionId: String,
         promptSkillName: String,

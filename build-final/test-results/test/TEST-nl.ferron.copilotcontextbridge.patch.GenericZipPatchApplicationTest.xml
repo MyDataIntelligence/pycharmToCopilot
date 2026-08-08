@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.patch.GenericZipPatchApplicationTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:32.421Z" hostname="FERRON" time="0.515">
+  <properties/>
+  <testcase name="testSourceOnlyZipNewFileRequiresExplicitSelection" classname="nl.ferron.copilotcontextbridge.patch.GenericZipPatchApplicationTest" time="0.182"/>
+  <testcase name="testReplaceFileUsesDiffValidationAndExplicitSelection" classname="nl.ferron.copilotcontextbridge.patch.GenericZipPatchApplicationTest" time="0.151"/>
+  <testcase name="testPowerShellAndBatchFilesAreReviewedAsTextInsteadOfBinary" classname="nl.ferron.copilotcontextbridge.patch.GenericZipPatchApplicationTest" time="0.08"/>
+  <testcase name="testPowerShellStyleBomZipParsesAsValidPythonAndStartsUnselected" classname="nl.ferron.copilotcontextbridge.patch.GenericZipPatchApplicationTest" time="0.102"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -36,6 +36,11 @@ class ContextPolicyDialog(
     private val previous = JComboBox(PreviousBatchMode.entries.map { it.name }.toTypedArray())
     private val repositoryFiles = JSpinner(SpinnerNumberModel(workingPolicy.maxRepositoryFiles.coerceIn(1, 500), 1, 500, 1))
     private val attachmentLimit = JSpinner(SpinnerNumberModel(workingPolicy.maxAttachments.coerceIn(2, 20), 2, 20, 1))
+    private val bundleCharacters =
+        JSpinner(SpinnerNumberModel(workingPolicy.maxBundleCharacters.coerceIn(10_000, 1_000_000), 10_000, 1_000_000, 5_000))
+    private val bundleTokens =
+        JSpinner(SpinnerNumberModel(workingPolicy.estimatedMaxBundleTokens.coerceIn(2_500, 250_000), 2_500, 250_000, 1_000))
+    private val branchScope = JComboBox(arrayOf("All branch changes", "Selected changed files"))
     private val bundle = JBCheckBox("Bundle automatic context", workingPolicy.bundleAutomaticContext)
 
     init {
@@ -43,6 +48,9 @@ class ContextPolicyDialog(
         target.selectedItem = workingPolicy.target
         returnMode.selectedItem = workingPolicy.returnMode
         previous.selectedItem = workingPolicy.previousBatchMode
+        val branchRule = workingPolicy.rules.firstOrNull { it.resolver == "git.branchChanges" }
+        branchScope.isEnabled = branchRule != null
+        branchScope.selectedIndex = if (branchRule?.parameters?.get("scope") in setOf("selected", "selected-changed")) 1 else 0
         table.autoCreateRowSorter = true
         table.fillsViewportHeight = true
         init()
@@ -52,7 +60,7 @@ class ContextPolicyDialog(
         JPanel(BorderLayout(8, 8)).apply {
             preferredSize = java.awt.Dimension(950, 560)
             add(
-                JPanel(java.awt.GridLayout(2, 4, 8, 6)).apply {
+                JPanel(java.awt.GridLayout(0, 4, 8, 6)).apply {
                     add(JLabel("Target"))
                     add(target)
                     add(JLabel("Return mode"))
@@ -61,6 +69,12 @@ class ContextPolicyDialog(
                     add(previous)
                     add(JLabel("Max repository files"))
                     add(repositoryFiles)
+                    add(JLabel("Max bundle characters"))
+                    add(bundleCharacters)
+                    add(JLabel("Estimated max bundle tokens"))
+                    add(bundleTokens)
+                    add(JLabel("Branch change scope"))
+                    add(branchScope)
                 },
                 BorderLayout.NORTH,
             )
@@ -94,8 +108,17 @@ class ContextPolicyDialog(
         workingPolicy.previousBatchMode = previous.selectedItem as String
         workingPolicy.maxRepositoryFiles = repositoryFiles.value as Int
         workingPolicy.maxAttachments = attachmentLimit.value as Int
+        workingPolicy.maxBundleCharacters = bundleCharacters.value as Int
+        workingPolicy.estimatedMaxBundleTokens = bundleTokens.value as Int
         workingPolicy.bundleAutomaticContext = bundle.isSelected
         workingPolicy.rules = model.rules.map(ContextRuleState::copyOf).toMutableList()
+        workingPolicy.rules.firstOrNull { it.resolver == "git.branchChanges" }?.let { rule ->
+            if (branchScope.selectedIndex == 1) {
+                rule.parameters["scope"] = "selected"
+            } else {
+                rule.parameters.remove("scope")
+            }
+        }
         ContextPolicyEditor.replaceWith(policy, workingPolicy)
         super.doOKAction()
     }
@@ -143,9 +166,14 @@ class ContextPolicyDialog(
         previous.selectedItem = workingPolicy.previousBatchMode
         repositoryFiles.value = workingPolicy.maxRepositoryFiles
         attachmentLimit.value = workingPolicy.maxAttachments
+        bundleCharacters.value = workingPolicy.maxBundleCharacters
+        bundleTokens.value = workingPolicy.estimatedMaxBundleTokens
         bundle.isSelected = workingPolicy.bundleAutomaticContext
         model.rules = workingPolicy.rules.map(ContextRuleState::copyOf).toMutableList()
         model.fireTableDataChanged()
+        val branchRule = workingPolicy.rules.firstOrNull { it.resolver == "git.branchChanges" }
+        branchScope.isEnabled = branchRule != null
+        branchScope.selectedIndex = if (branchRule?.parameters?.get("scope") in setOf("selected", "selected-changed")) 1 else 0
     }
 
     private class RuleTableModel(

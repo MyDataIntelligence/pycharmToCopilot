@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.guidelines.GuidelineServiceTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:31.101Z" hostname="FERRON" time="0.945">
+  <properties/>
+  <testcase name="testRepositoryEditorRejectsFilesOutsideDetectedGuidelineSources" classname="nl.ferron.copilotcontextbridge.guidelines.GuidelineServiceTest" time="0.125"/>
+  <testcase name="testDetectsSourcesWithSafeDefaultsAndExtractsOnlyRelevantReadmeSections" classname="nl.ferron.copilotcontextbridge.guidelines.GuidelineServiceTest" time="0.233"/>
+  <testcase name="testEffectiveGuidelinesAlwaysIncludeHardPythonAuthoringRules" classname="nl.ferron.copilotcontextbridge.guidelines.GuidelineServiceTest" time="0.219"/>
+  <testcase name="testRepositoryEditorLoadsCompleteSourceAndWritesOnlyOnExplicitSave" classname="nl.ferron.copilotcontextbridge.guidelines.GuidelineServiceTest" time="0.169"/>
+  <testcase name="testPolicyCanDisableRepositoryInstructionSourcesIndependently" classname="nl.ferron.copilotcontextbridge.guidelines.GuidelineServiceTest" time="0.197"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -21,13 +21,17 @@ object ReturnInstructionDefaults {
         When a genuinely new Python file is required, use `operation: add_file`, its repository-relative `path`, and `replacement` containing the complete syntactically valid file. When the user explicitly requested removal of a complete Python file, use `operation: delete_file`, its repository-relative `path`, and the exported exact-file `originalHash`; never propose an unrelated or implicit deletion. Use function operations for changes inside existing files instead of returning whole-file replacements.
 
         Also include `summary` with: overview, changed paths and qualified functions, reasons, tests actually performed, risks, assumptions, and limitations. Do not claim a validation ran when it did not run.
+
+        For every returned Python function, use a clear verb-led descriptive function name and meaningful variable and parameter names. Write an English Google-style docstring following https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html, with `Args:`, `Returns:`, `Yields:` and `Raises:` where applicable. A docstring describes only current functional behavior and must never mention change history such as "changed because", "modified to" or "updated so that".
         """.trimIndent()
 
     private val CODE_TOOL_FILES =
         """
-        Use the available code/file-creation tool to return one real downloadable ZIP, not ordinary chat-only code blocks. A versioned `changes.json` manifest (`schemaVersion`: 1) at the ZIP root is mandatory. It must preserve every original repository-relative path and reference the complete source for each new or changed file. Do not return a loose source-only ZIP. For changed Python functions, record the fully `qualifiedName` and exported `originalHash`; never return a partial function.
+        Use the available code/file-creation tool to return one real downloadable ZIP, not ordinary chat-only code blocks. A versioned `changes.json` manifest (`formatVersion`: 1) at the ZIP root is mandatory. It must preserve every original repository-relative path and reference the complete source for each new or changed file. Use `add_file` for a new file and `replace_file` plus the exported exact-file `originalHash` for a complete changed file. Do not return a loose source-only ZIP. For function-level changes, record the fully `qualifiedName` and exported `originalHash`; never return a partial function.
 
         Include `CHANGE_SUMMARY.md` with: overview, changed paths, qualified functions, reasons, tests actually performed, risks, assumptions, and limitations. If the interface cannot create files, state that limitation and use clearly labelled full-source code blocks as a fallback.
+
+        Python output uses clear verb-led descriptive function names, meaningful variable and parameter names, and English Google-style docstrings following https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html. Include `Args:`, `Returns:`, `Yields:` and `Raises:` where applicable. Docstrings describe only current behavior and never change history.
         """.trimIndent()
 
     private val TEXT_ONLY =
@@ -35,6 +39,8 @@ object ReturnInstructionDefaults {
         Return the requested result directly in the chat as structured text. Identify referenced or proposed files by their original repository-relative path. When the task requests source code, provide complete source for every new file and complete functions for changed Python behavior; never use partial snippets or “the rest stays the same”.
 
         End with a concise summary containing: result, paths considered, assumptions, validation actually performed, risks, and limitations. Do not emit a `.copilotpatch` schema unless the user explicitly changes the requested return mode.
+
+        Python output uses clear verb-led descriptive function names, meaningful variable and parameter names, and English Google-style docstrings following https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html. Include `Args:`, `Returns:`, `Yields:` and `Raises:` where applicable. Docstrings describe only current behavior and never change history.
         """.trimIndent()
 
     private val DIRECT_EDIT =
@@ -42,6 +48,8 @@ object ReturnInstructionDefaults {
         Apply the requested changes directly to the repository workspace available to GitHub Copilot. Modify only original repository-relative paths that are in scope. Write complete, syntactically valid source and preserve unrelated code. For Python changes, identify the affected fully qualified functions and use the exported original hashes as conflict evidence before overwriting changed local code.
 
         After editing, report: overview, changed paths and qualified functions, reasons, tests and validation actually performed, risks, assumptions, and limitations. Do not return or invent a `.copilotpatch` attachment for this direct-edit mode.
+
+        Python edits use clear verb-led descriptive function names, meaningful variable and parameter names, and English Google-style docstrings following https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html. Include `Args:`, `Returns:`, `Yields:` and `Raises:` where applicable. Docstrings describe only current behavior and never change history.
         """.trimIndent()
 }
 
@@ -60,6 +68,38 @@ data class EffectiveReturnInstructions(
 )
 
 object ReturnInstructions {
+    private val requirementClauses: Map<CopilotReturnMode, Map<String, String>> =
+        mapOf(
+            CopilotReturnMode.COPILOT_PATCH_FILE to
+                mapOf(
+                    "schemaVersion" to "Use schema version field `formatVersion` with value `1`.",
+                    "originalPath" to "For every change, include its original repository-relative `path`.",
+                    "originalHash" to "Include the exported `originalHash` so local changes are not silently overwritten.",
+                    "qualifiedFunction" to "Identify each changed Python function by its fully `qualifiedName`.",
+                    "completeSource" to "Return complete replacement source including decorators, signature, and full body.",
+                ),
+            CopilotReturnMode.CODE_TOOL_FILES to
+                mapOf(
+                    "schemaVersion" to "At the ZIP root, use a `changes.json` manifest with `formatVersion`: 1.",
+                    "originalPath" to "Preserve every original repository-relative `path` in the file manifest.",
+                    "originalHash" to "Include the exported `originalHash` for every changed Python function.",
+                    "qualifiedFunction" to "Record every changed Python function by its fully `qualifiedName`.",
+                    "completeSource" to "Return complete source for each file or complete functions; never partial snippets.",
+                ),
+            CopilotReturnMode.TEXT_ONLY to
+                mapOf(
+                    "originalPath" to "Identify referenced output by its original repository-relative `path`.",
+                    "completeSource" to "For code tasks, return complete source and never partial snippets.",
+                ),
+            CopilotReturnMode.DIRECT_REPOSITORY_EDIT to
+                mapOf(
+                    "originalPath" to "Limit edits to original repository-relative `path` values that are in scope.",
+                    "originalHash" to "Use exported `originalHash` values as conflict evidence before overwriting.",
+                    "qualifiedFunction" to "Report the fully qualified functions affected by direct edits.",
+                    "completeSource" to "Write complete, syntactically valid source.",
+                ),
+        )
+
     fun mode(policy: ContextPolicyState): CopilotReturnMode =
         runCatching { CopilotReturnMode.valueOf(policy.returnMode) }.getOrDefault(CopilotReturnMode.COPILOT_PATCH_FILE)
 
@@ -104,8 +144,8 @@ object ReturnInstructions {
                     )
                 CopilotReturnMode.CODE_TOOL_FILES ->
                     listOf(
-                        requirement("schemaVersion", "Require a versioned file manifest (`schemaVersion`: 1).") {
-                            "schemaversion" in it && Regex("schemaversion.{0,30}1").containsMatchIn(it)
+                        requirement("schemaVersion", "Require the versioned file manifest field (`formatVersion`: 1).") {
+                            "formatversion" in it && Regex("formatversion.{0,30}1").containsMatchIn(it)
                         },
                         requirement("originalPath", "Require original repository-relative paths in the file manifest.") {
                             "repository-relative" in it && "path" in it
@@ -147,6 +187,15 @@ object ReturnInstructions {
                     )
             }
         return requirements.mapNotNull { it.issue(value) }
+    }
+
+    fun restoreRequirement(
+        mode: CopilotReturnMode,
+        text: String,
+        requirement: String,
+    ): String {
+        val clause = requirementClauses[mode]?.get(requirement) ?: error("Unknown requirement '$requirement' for $mode.")
+        return listOf(text.trim(), clause).filter(String::isNotBlank).joinToString("\n\n")
     }
 
     private fun requirement(

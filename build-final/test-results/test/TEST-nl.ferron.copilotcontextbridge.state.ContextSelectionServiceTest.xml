@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:37.888Z" hostname="FERRON" time="0.748">
+  <properties/>
+  <testcase name="testPreparedBatchIsMarkedHandedOffAfterSendAction" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.046"/>
+  <testcase name="testClearRemovesPinnedFilesDiscoveryRootsAndAutomaticExclusions" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.146"/>
+  <testcase name="testSettingsOnlyActionCanRequestImmediateRecalculation" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.039"/>
+  <testcase name="testUnsafeRelativePathsAreNeverPersisted" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.046"/>
+  <testcase name="testArchiveSourceKeysRemainDistinctAcrossBatches" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.062"/>
+  <testcase name="testNewSessionDoesNotExposeEarlierBatchesOrSentFileAvoidance" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.061"/>
+  <testcase name="testAutomaticExclusionsAreBatchScopedAndClearable" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.047"/>
+  <testcase name="testMultiSelectionAcrossFilesAndDirectoryPublishesOneChange" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.159"/>
+  <testcase name="testExclusionScopesHaveDistinctLifetimesAndIncludeOnceOverridesThem" classname="nl.ferron.copilotcontextbridge.state.ContextSelectionServiceTest" time="0.14"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

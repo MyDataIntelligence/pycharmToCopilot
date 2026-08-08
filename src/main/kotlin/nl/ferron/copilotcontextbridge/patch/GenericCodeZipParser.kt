@@ -137,6 +137,9 @@ class GenericCodeZipParser {
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
                 .decode(java.nio.ByteBuffer.wrap(bytes))
                 .toString()
+                .removePrefix("\uFEFF")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
         }.getOrElse {
             throw IllegalArgumentException("ZIP entry is not valid UTF-8 text: $path", it)
         }

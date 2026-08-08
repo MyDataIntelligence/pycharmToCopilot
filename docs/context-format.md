@@ -10,6 +10,7 @@ Every prepared batch contains one generated `00_REPO_CONTEXT.md`. It is always a
 - attachments are the actual files staged for Copilot;
 - pinned repository files stay separate unless a policy explicitly changes that rule;
 - automatic repository files may be bundled by `bundleGroup` when `bundleAutomaticContext` is enabled;
+- bundles obey deterministic file-count, byte, character and estimated-token limits and split only between complete source files;
 - generated branch context may become a generated attachment;
 - the physical plan must never exceed `maxAttachments` (2–20, default 20).
 
@@ -36,6 +37,10 @@ The generated document contains:
 13. effective Return Instructions for the selected return mode.
 
 The document explicitly states that omitted/excluded file contents were not supplied and must not be invented.
+
+## Kickoff prompt
+
+The prepared Batch view renders a separate short prompt directly below the file drag zone. It is not a replacement for this context document. It tells Copilot to read `00_REPO_CONTEXT.md`, identifies the selected Prompt Skill and session/batch, preserves original repository paths as identity, references the effective Return Instructions, and warns that more batches may follow. **Copy prompt** copies only this message; **Copy as text** places it before the complete combined context. The global template and optional project override require `{sessionId}`, `{batchNumber}`, `{promptSkill}`, and the literal `00_REPO_CONTEXT.md`.
 
 ## Function hash
 

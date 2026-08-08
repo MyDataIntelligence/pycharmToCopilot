@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:35.776Z" hostname="FERRON" time="0.75">
+  <properties/>
+  <testcase name="testNewNestedFunctionUsesUnambiguousParentAndAnchor" classname="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" time="0.079"/>
+  <testcase name="testRejectsDuplicateTargetAndWholeFileOperationMixedWithFunctionEdit" classname="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" time="0.072"/>
+  <testcase name="testAddsDecoratedAsyncMethodAndPreservesItsCompleteKind" classname="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" time="0.1"/>
+  <testcase name="testSyncAsyncAndDecoratorChangesRequireExplicitFlags" classname="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" time="0.099"/>
+  <testcase name="testMissingAndAmbiguousQualifiedNamesStayUnselectable" classname="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" time="0.062"/>
+  <testcase name="testOverlappingParentAndNestedReplacementsAreRejectedTogether" classname="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" time="0.065"/>
+  <testcase name="testRejectsTraversalAbsoluteWrongRepositoryAndNonPythonPath" classname="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" time="0.065"/>
+  <testcase name="testRejectsInvalidSyntaxAndMultipleFunctions" classname="nl.ferron.copilotcontextbridge.patch.PatchValidationEdgeCaseTest" time="0.208"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

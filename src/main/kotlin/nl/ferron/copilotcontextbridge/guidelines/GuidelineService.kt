@@ -9,6 +9,7 @@ import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.security.PathSafety
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
+import nl.ferron.copilotcontextbridge.settings.Defaults
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -104,6 +105,10 @@ class GuidelineService(
                     appendLine()
                     appendLine(repository)
                 }
+                appendLine()
+                appendLine("## Plugin Python authoring rules")
+                appendLine()
+                appendLine(Defaults.PYTHON_AUTHORING_RULES)
                 appendLine()
                 appendLine("## Global personal guidelines")
                 appendLine()

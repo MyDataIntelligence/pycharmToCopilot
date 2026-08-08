@@ -14,6 +14,7 @@ import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.GridLayout
 import javax.swing.BorderFactory
+import javax.swing.BoxLayout
 import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.JLabel
@@ -36,7 +37,7 @@ class ReturnInstructionsPanel(
     private val projectOverride = editor()
     private val promptAddition = editor()
     private val effective = editor().apply { isEditable = false }
-    private val validation = JLabel()
+    private val validation = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
     private var loading = false
 
     init {
@@ -143,14 +144,36 @@ class ReturnInstructionsPanel(
         effective.text = listOf(base.trim(), promptAddition.text.trim()).filter(String::isNotBlank).joinToString("\n\n")
         effective.caretPosition = 0
         val issues = ReturnInstructions.validate(selectedMode(), effective.text)
-        validation.text =
-            if (issues.isEmpty()) {
-                "All required safeguards for ${selectedMode().name} are present."
-            } else {
-                "<html><b>Unsafe/incomplete instructions:</b> ${issues.joinToString(" &nbsp;|&nbsp; ") { it.message }}</html>"
+        validation.removeAll()
+        if (issues.isEmpty()) {
+            validation.add(
+                JLabel("All required safeguards for ${selectedMode().name} are present.").apply {
+                    foreground = JBColor(0x237A3B, 0x64C77B)
+                },
+            )
+        } else {
+            issues.forEach { issue ->
+                validation.add(
+                    JPanel(BorderLayout(6, 0)).apply {
+                        add(
+                            JLabel("<html><b>Unsafe/incomplete:</b> ${issue.message}</html>").apply {
+                                foreground = JBColor(0xB42318, 0xFF7B72)
+                                horizontalAlignment = SwingConstants.LEFT
+                            },
+                            BorderLayout.CENTER,
+                        )
+                        add(
+                            JButton("Restore requirement").apply {
+                                addActionListener { restoreRequirement(issue.requirement) }
+                            },
+                            BorderLayout.EAST,
+                        )
+                    },
+                )
             }
-        validation.foreground = if (issues.isEmpty()) JBColor(0x237A3B, 0x64C77B) else JBColor(0xB42318, 0xFF7B72)
-        validation.horizontalAlignment = SwingConstants.LEFT
+        }
+        validation.revalidate()
+        validation.repaint()
     }
 
     private fun save() {
@@ -195,6 +218,12 @@ class ReturnInstructionsPanel(
         clearProjectOverride()
         clearPromptAddition()
         save()
+    }
+
+    private fun restoreRequirement(requirement: String) {
+        val target = if (useProjectOverride.isSelected) projectOverride else global
+        target.text = ReturnInstructions.restoreRequirement(selectedMode(), target.text, requirement)
+        refreshEffective()
     }
 
     private fun selectedSkill(): AppSettings.PromptSkillState? = app.promptSkills.firstOrNull { it.id == prompt.selectedItem as? String }

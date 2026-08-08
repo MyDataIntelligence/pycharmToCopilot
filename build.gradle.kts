@@ -36,6 +36,7 @@ tasks.withType<KotlinCompile>().configureEach {
 intellijPlatform {
     pluginConfiguration {
         id = "nl.ferron.copilot-context-bridge"
+
         name = "Copilot Context Bridge"
         version = project.version.toString()
         ideaVersion {

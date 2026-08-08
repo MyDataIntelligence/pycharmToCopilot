@@ -76,6 +76,10 @@ class ContextPolicyState {
 
     @JvmField var maxAttachments: Int = 20
 
+    @JvmField var maxBundleCharacters: Int = 80_000
+
+    @JvmField var estimatedMaxBundleTokens: Int = 20_000
+
     @JvmField var bundleAutomaticContext: Boolean = true
 
     @JvmField var rules: MutableList<ContextRuleState> = defaultRules().toMutableList()
@@ -109,6 +113,8 @@ class ContextPolicyState {
             it.previousBatchMode = previousBatchMode
             it.maxRepositoryFiles = maxRepositoryFiles
             it.maxAttachments = maxAttachments
+            it.maxBundleCharacters = maxBundleCharacters
+            it.estimatedMaxBundleTokens = estimatedMaxBundleTokens
             it.bundleAutomaticContext = bundleAutomaticContext
         }
 

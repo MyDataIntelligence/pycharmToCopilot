@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.settings.PromptSkillLibraryCodecTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:37.541Z" hostname="FERRON" time="0.005">
+  <properties/>
+  <testcase name="testRejectsEmptyDuplicateAndIncompleteLibraries" classname="nl.ferron.copilotcontextbridge.settings.PromptSkillLibraryCodecTest" time="0.002"/>
+  <testcase name="testRoundTripPreservesPromptAndGuidelines" classname="nl.ferron.copilotcontextbridge.settings.PromptSkillLibraryCodecTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

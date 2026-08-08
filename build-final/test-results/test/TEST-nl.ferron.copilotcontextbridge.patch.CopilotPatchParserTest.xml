@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:32.048Z" hostname="FERRON" time="0.018">
+  <properties/>
+  <testcase name="rejects duplicate ZIP entries and snippet outside replacements directory" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.011"/>
+  <testcase name="parses add file without qualified name" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.001"/>
+  <testcase name="zip resolves add file content from replacements directory" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.0"/>
+  <testcase name="parses add function without original hash" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.0"/>
+  <testcase name="rejects delete file with replacement content" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.0"/>
+  <testcase name="rejects traversal zip entry" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.0"/>
+  <testcase name="parses delete file with exact hash and no replacement" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.001"/>
+  <testcase name="parses replacement and summary" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.0"/>
+  <testcase name="rejects invalid hash duplicate target and noncanonical path" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.001"/>
+  <testcase name="zip resolves replacement file" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.0"/>
+  <testcase name="rejects known schema fields with wrong JSON types or incomplete summary" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.001"/>
+  <testcase name="utf8 bom is accepted for structured json and zip snippet" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.001"/>
+  <testcase name="parses structured whole file replacement with exact hash" classname="nl.ferron.copilotcontextbridge.patch.CopilotPatchParserTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
