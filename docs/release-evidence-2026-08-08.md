@@ -7,9 +7,9 @@ This record separates verified automated/install evidence from the still-pending
 - Gradle: 9.5.0.
 - Kotlin: 2.1.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
-- Command: `.\gradlew.bat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release22 --no-daemon --console=plain`.
-- Result: `BUILD SUCCESSFUL`; 220 tests, 0 failures, 0 errors and 0 skipped tests.
-- The release22 gate passed all 220 tests, including external restore, runtime resolver handlers, non-Python whole-file patch operations, relation identity, prompt ordering/import migration, previous-batch filtering, the Chosen/Pinned context-files view, responsive Batch layout, ignored-tree guideline discovery and policy duplication.
+- Command: `.\gradlew.bat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release23 --no-daemon --console=plain`.
+- Result: `BUILD SUCCESSFUL`; 221 tests, 0 failures, 0 errors and 0 skipped tests.
+- The release23 gate passed all 221 tests, including external restore, runtime resolver handlers and external caller analysis, non-Python whole-file patch operations, relation identity, prompt ordering/import migration, previous-batch filtering, the Chosen/Pinned context-files view, responsive Batch layout, ignored-tree guideline discovery and policy duplication.
 - Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
 
 The Gradle launcher itself used the locally installed JDK 17. Gradle selected the configured JDK 21 toolchain for plugin compilation.
@@ -17,15 +17,15 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 ## ZIP and installer result
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
-- Current release22 ZIP produced by `buildPlugin`: 847609 bytes, SHA-256 `8C351BA5DD736F2784F38150E006D0E131E228507A63929125D237979B314ED4`.
-- Final verification ZIP: `build-final-release22/distributions/copilot-context-bridge-1.0.0.zip`.
-- Final verification size: 847609 bytes.
-- Final verification SHA-256: `8C351BA5DD736F2784F38150E006D0E131E228507A63929125D237979B314ED4`.
+- Current release23 ZIP produced by `buildPlugin`: 848018 bytes, SHA-256 `FA50AE451B4F27DF564CE1DAE7B79F6CFAF42B807831CD52B37F91463FD6F552`.
+- Final verification ZIP: `build-final-release23/distributions/copilot-context-bridge-1.0.0.zip`.
+- Final verification size: 848018 bytes.
+- Final verification SHA-256: `FA50AE451B4F27DF564CE1DAE7B79F6CFAF42B807831CD52B37F91463FD6F552`.
 - The ZIP includes the compact Batch dropdown renderer, wrapped Context Files details and their regression tests.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
-- `install.ps1 -BuildOnly` was run successfully after release22; it produced a fresh ZIP and copied it to `build/distributions`.
+- `install.ps1 -BuildOnly` was run successfully after release23; it produced a fresh ZIP and copied it to `build/distributions`.
 - The installer now runs `clean buildPlugin` in its isolated build directory before packaging, preventing stale Kotlin classes from leaking into a later install.
-- A full `install.ps1` run after release22 completed successfully after closing the controlled test instance and atomically installed `%APPDATA%/JetBrains/PyCharm2026.2/plugins/copilot-context-bridge`.
+- A full `install.ps1` run after release23 completed successfully after closing the controlled test instance and atomically installed `%APPDATA%/JetBrains/PyCharm2026.2/plugins/copilot-context-bridge`.
 - The previous installed version was backed up outside the IDE plugin directory under `%LOCALAPPDATA%/CopilotContextBridge/plugin-backups/PyCharm2026.2`.
 - The restarted PyCharm 2026.2 instance loaded `Copilot Context Bridge (1.0.0)` and the live Batch/Preview/More views were observed without plugin class-loading errors.
 - Exactly one installed directory contains `copilot-context-bridge-1.0.0.jar`.
@@ -54,7 +54,7 @@ The latest live navigation captures [`L209-current.png`](screenshots/live-audit/
 
 The More quick-action order was checked before and after opening Guidelines and returning to More. [`L213-more-quick-actions-current.png`](screenshots/live-audit/L213-more-quick-actions-current.png) and [`L214-more-after-guidelines-return.png`](screenshots/live-audit/L214-more-after-guidelines-return.png) show the same Quick copy and Batch history ordering after navigation.
 
-After the release22 build, `install.ps1` was run in full mode: it rebuilt, atomically replaced the PyCharm 2026.2 plugin, preserved the previous version in the configured backup directory, and PyCharm was restarted. The post-reinstall live captures [`L211-batch-dropdown-after-reinstall.png`](screenshots/live-audit/L211-batch-dropdown-after-reinstall.png) and [`L212-preview-wrapped-context-files.png`](screenshots/live-audit/L212-preview-wrapped-context-files.png) show the new popup provenance labels and wrapped Preview details.
+After the release23 build, `install.ps1` was run in full mode: it rebuilt, atomically replaced the PyCharm 2026.2 plugin, preserved the previous version in the configured backup directory, and PyCharm was restarted. The post-reinstall live captures [`L211-batch-dropdown-after-reinstall.png`](screenshots/live-audit/L211-batch-dropdown-after-reinstall.png) and [`L212-preview-wrapped-context-files.png`](screenshots/live-audit/L212-preview-wrapped-context-files.png) show the new popup provenance labels and wrapped Preview details.
 
 The corresponding `Copy files` assertion exposed a real `javaFileListFlavor` list containing the staged `00_REPO_CONTEXT.md`, `README.md`, `src/main/kotlin/nl/ferron/copilotcontextbridge/settings/AppSettings.kt` and generated automatic attachment, rather than a text-only paste.
 
