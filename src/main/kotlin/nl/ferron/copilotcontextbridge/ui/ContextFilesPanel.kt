@@ -30,6 +30,13 @@ class ContextFilesPanel(
 ) : JPanel(BorderLayout()) {
     private val selection = project.getService(ContextSelectionService::class.java)
     private val externalSelection = project.getService(ExternalRepositorySelectionRegistry::class.java)
+
+    /**
+     * Pinned files are kept in a separate view so the user's explicit choices are never hidden
+     * among automatically discovered context.
+     */
+
+    private val chosen = rowsPanel()
     private val included = rowsPanel()
     private val omitted = rowsPanel()
     private val excluded = rowsPanel()
@@ -37,6 +44,7 @@ class ContextFilesPanel(
 
     init {
         border = JBUI.Borders.empty(8)
+        tabs.addTab("Chosen", contextScrollPane(chosen))
         tabs.addTab("Included", contextScrollPane(included))
         tabs.addTab("Omitted", contextScrollPane(omitted))
         tabs.addTab("Excluded", contextScrollPane(excluded))
@@ -51,6 +59,20 @@ class ContextFilesPanel(
     }
 
     fun show(pack: ContextPack) {
+        val chosenCandidates =
+            (pack.selection.included + pack.selection.omitted + pack.selection.excluded)
+                .filter { it.pinned }
+                .distinctBy { it.sourceKey }
+        replaceRows(
+            chosen,
+            chosenCandidates,
+        ) { candidate ->
+            val attachment = pack.attachmentPlan.repositoryToAttachment[candidate.sourceKey] ?: "not packed"
+            candidateRow(
+                candidate,
+                "Chosen by you (pinned) · attachment: $attachment",
+            )
+        }
         replaceRows(
             included,
             pack.selection.included,
@@ -152,9 +174,10 @@ class ContextFilesPanel(
                 },
             )
         }
-        tabs.setTitleAt(0, "Included (${pack.selection.included.size})")
-        tabs.setTitleAt(1, "Omitted (${pack.selection.omitted.size})")
-        tabs.setTitleAt(2, "Excluded (${pack.selection.excluded.size})")
+        tabs.setTitleAt(0, "Chosen (${chosenCandidates.size})")
+        tabs.setTitleAt(1, "Included (${pack.selection.included.size})")
+        tabs.setTitleAt(2, "Omitted (${pack.selection.omitted.size})")
+        tabs.setTitleAt(3, "Excluded (${pack.selection.excluded.size})")
     }
 
     private fun candidateRow(
