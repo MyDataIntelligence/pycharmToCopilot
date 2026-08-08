@@ -41,10 +41,10 @@
         <projectService serviceImplementation="nl.ferron.copilotcontextbridge.context.ContextPackService"/>
         <projectService serviceImplementation="nl.ferron.copilotcontextbridge.external.ExternalRepositorySelectionRegistry"/>
         <applicationConfigurable id="nl.ferron.copilotcontextbridge.settings.application"
-                                 displayName="Copilot Context Bridge"
+                                 displayName="Copilot Context Bridge (Application)"
                                  instance="nl.ferron.copilotcontextbridge.settings.AppSettingsConfigurable"/>
         <projectConfigurable id="nl.ferron.copilotcontextbridge.settings.project"
-                             displayName="Copilot Context Bridge"
+                             displayName="Copilot Context Bridge (Project)"
                              instance="nl.ferron.copilotcontextbridge.settings.ProjectSettingsConfigurable"/>
         <notificationGroup id="Copilot Context Bridge" displayType="BALLOON" isLogByDefault="true"/>
     </extensions>

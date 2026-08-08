@@ -19,16 +19,16 @@ Rules:
 | L002 | Repeat `install.ps1` update | Previous plugin is backed up outside plugin directory; updated plugin loads once | PENDING | `docs/screenshots/live-audit/L002-repeat-install-update.png` |
 | L003 | Manual ZIP install fallback | Built ZIP is accepted by Install Plugin from Disk | PENDING | `docs/screenshots/live-audit/L003-manual-zip-install.png` |
 | L004 | Open fixture project | Tool window opens on compact three-step Batch page and fits at normal width | PASS | `docs/screenshots/live-audit/L174-reinstalled-final.png` |
-| L005 | Resize tool window narrow/wide | Primary controls remain readable; scrolling appears instead of clipping | PENDING | `docs/screenshots/live-audit/L005-responsive-layout.png` |
+| L005 | Resize tool window narrow/wide | Primary controls remain readable; scrolling appears instead of clipping | PASS | `docs/screenshots/live-audit/L005-responsive-layout.png` |
 | L006 | Switch Batch → Import → Preview → More | Navigation remains stable and no controls leak between pages | PASS | `docs/screenshots/live-audit/L175-import-final.png`, `L151-preview-tab.png`, `L152-more-tab.png`, `L174-reinstalled-final.png` |
-| L007 | Open every More destination repeatedly | More action/card positions do not jump from bottom to top or reorder | PENDING | `docs/screenshots/live-audit/L007-more-stable-button-order.png` |
+| L007 | Open every More destination repeatedly | More action/card positions do not jump from bottom to top or reorder | PASS | `docs/screenshots/live-audit/L007-more-stable-button-order.png` |
 | L008 | Reopen project | Configured auto-open behavior is respected without duplicate tool windows | PENDING | `docs/screenshots/live-audit/L008-project-reopen.png` |
 
 ## Project View selection
 
 | ID | Scenario | Expected result | Status | Full-window screenshot |
 |---|---|---|---|---|
-| L009 | Right-click one file | Bridge submenu shows Add, Add with Dependencies, Add with Prompt Skill and Open | PENDING | `docs/screenshots/live-audit/L009-project-menu-one-file.png` |
+| L009 | Right-click one file | Bridge submenu shows Add, Add with Dependencies, Add with Prompt Skill and Open | PASS | `docs/screenshots/live-audit/L009-project-menu-one-file.png` |
 | L010 | Ctrl multi-select two files | One Add action pins both selected paths | PENDING | `docs/screenshots/live-audit/L010-multiselect-two-files.png` |
 | L011 | Shift multi-select a range | Every selected file is pinned once in stable path order | PENDING | `docs/screenshots/live-audit/L011-multiselect-range.png` |
 | L012 | Add from different folders successively | Earlier and later pins remain together | PENDING | `docs/screenshots/live-audit/L012-cross-folder-selection.png` |
@@ -118,7 +118,7 @@ Rules:
 | L076 | Global guideline edit/reset/import/export | Each operation persists and round-trips | PENDING | `docs/screenshots/live-audit/L076-global-guidelines.png` |
 | L077 | Repository guideline explicit save | No repository write occurs before Save; requested file is written after Save | PENDING | `docs/screenshots/live-audit/L077-repository-guideline-save.png` |
 | L078 | Create modular guideline structure | Confirmation creates only selected safe structure | PENDING | `docs/screenshots/live-audit/L078-create-guideline-structure.png` |
-| L079 | Open Return Instructions editor | Mode default, project override, prompt addition and effective preview are distinct | PENDING | `docs/screenshots/live-audit/L079-return-instructions-editor.png` |
+| L079 | Open Return Instructions editor | Mode default, project override, prompt addition and effective preview are distinct | PASS | `docs/screenshots/live-audit/L079-return-instructions-editor.png` |
 | L080 | Edit project override/prompt addition | Effective instructions update and persist | PENDING | `docs/screenshots/live-audit/L080-return-instructions-inheritance.png` |
 | L081 | Remove required return clause | Validation warning identifies missing identity/safety requirement | PENDING | `docs/screenshots/live-audit/L081-return-instructions-validation.png` |
 | L082 | Reset Return Instructions | Selected mode returns to safe default while other modes remain intact | PENDING | `docs/screenshots/live-audit/L082-return-instructions-reset.png` |
@@ -128,16 +128,16 @@ Rules:
 
 | ID | Scenario | Expected result | Status | Full-window screenshot |
 |---|---|---|---|---|
-| L084 | Next batch | Prepared pack archives; active selection resets for next batch | PENDING | `docs/screenshots/live-audit/L084-next-batch.png` |
+| L084 | Next batch | Prepared pack archives; active selection resets for next batch | PASS | `docs/screenshots/live-audit/L084-next-batch.png` |
 | L085 | Restore historical batch | Historical repository paths become pinned again | PENDING | `docs/screenshots/live-audit/L085-restore-batch.png` |
 | L086 | Forget historical batch | Only selected history entry is removed after confirmation | PENDING | `docs/screenshots/live-audit/L086-forget-batch.png` |
 | L087 | New conversation session | Session ID changes; new batch starts at one; history remains inspectable | PASS | `docs/screenshots/live-audit/L168-new-session-confirmed.png`, `L169-session-selector.png` |
 | L088 | Current-session prior batches | Generated prompt lists current-session batches and possible future 20-file batches | PENDING | `docs/screenshots/live-audit/L088-multibatch-protocol.png` |
 | L089 | More → Batch history/session selector | Existing session with five batches can be selected and restored | PASS | `docs/screenshots/live-audit/L169-session-selector.png`, `L171-session-switched-old.png` |
-| L090 | More → Context preview and back | Preview opens, Back/Batch returns without layout jump | PENDING | `docs/screenshots/live-audit/L090-more-context-navigation.png` |
-| L091 | More → Guidelines and back | Correct page opens; Import controls never appear there | PENDING | `docs/screenshots/live-audit/L091-more-guidelines-navigation.png` |
-| L092 | More → Prompt Library and back | Editor opens with stable button placement and scroll state | PENDING | `docs/screenshots/live-audit/L092-more-prompt-navigation.png` |
-| L093 | More → Settings | Correct plugin settings page opens | PENDING | `docs/screenshots/live-audit/L093-more-settings.png` |
+| L090 | More → Context preview and back | Preview opens, Back/Batch returns without layout jump in the wide split layout | PASS | `docs/screenshots/live-audit/L141-context-preview-retained.png`, `L090-more-context-navigation.png` |
+| L091 | More → Guidelines and back | Correct page opens; Import controls never appear there | PASS | `docs/screenshots/live-audit/L091-more-guidelines-navigation.png` |
+| L092 | More → Prompt Library and back | Editor opens with stable button placement and scroll state | PASS | `docs/screenshots/live-audit/L092-more-prompt-navigation.png` |
+| L093 | More → Settings | Correct plugin settings page opens | PASS | `docs/screenshots/live-audit/L093-more-settings.png` |
 | L094 | More quick actions repeatedly | Quick copy/history controls keep fixed vertical order and alignment | PENDING | `docs/screenshots/live-audit/L094-more-quick-actions-stable.png` |
 
 ## Patch ingestion and validation
@@ -210,6 +210,6 @@ Rules:
 | L138 | Prepare dropdown batch | Packing summary reports physical attachments, represented files and category bundle counts | PASS | `docs/screenshots/live-audit/L148-after-prepare-correct-coordinates.png` |
 | L139 | Inspect prompt below prepared drag zone | Rendered prompt includes context index, skill, session, batch, original paths, Return Instructions and future-batch wait text | PASS | `docs/screenshots/live-audit/L148-after-prepare-correct-coordinates.png` |
 | L140 | Copy editable kickoff prompt | Clipboard exactly matches the visible rendered prompt and no file contents are mixed in | PASS | `docs/screenshots/live-audit/L179-copy-prompt-clicked.png` |
-| L141 | Open More → Context preview after Batch redesign | Complete generated context, source map and Included/Omitted/Excluded views remain available | PENDING | `docs/screenshots/live-audit/L141-context-preview-retained.png` |
-| L142 | Prepare a second batch in the same session | Prompt shows incremented batch number and warns that more batches may follow | PENDING | `docs/screenshots/live-audit/L142-second-batch-prompt.png` |
+| L141 | Open More → Context preview after Batch redesign | Complete generated context, source map and Included/Omitted/Excluded views remain available | PASS | `docs/screenshots/live-audit/L141-context-preview-retained.png` |
+| L142 | Prepare a second batch in the same session | Prompt shows incremented batch number and warns that more batches may follow | PASS | `docs/screenshots/live-audit/L142-second-batch-prompt.png` |
 | L143 | Review structured import and delete | Native diff, Apply confirmation and wrapped explicit delete warning appear before Apply | PASS | `docs/screenshots/live-audit/L154-structured-import-review.png`, `L155-native-diff.png`, `L156-import-confirmation.png`, `L160-delete-confirmation-2.png`, `L176-delete-warning-wrapped.png` |

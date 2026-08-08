@@ -7,7 +7,7 @@ This record separates verified automated/install evidence from the still-pending
 - Gradle: 9.5.0.
 - Kotlin: 2.1.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
-- Command: `.\gradlew.bat clean test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release6 --no-daemon`.
+- Command: `.\gradlew.bat clean test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release8 --no-daemon`.
 - Result: `BUILD SUCCESSFUL`; 51 suites and 191 tests, 0 failures, 0 errors and 0 skipped tests.
 - The same final-audit command rebuilt the ZIP and ran the verifier.
 - Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
@@ -17,10 +17,10 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 ## ZIP and installer result
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
-- Repository copy produced by the final `install.ps1`: 808536 bytes, SHA-256 `E9B92D1497987B8957B7EDF1283AD41333FF4B2F6DFCC38F440083938FE7E0AC`.
-- Final verification ZIP: `build-final-release6/distributions/copilot-context-bridge-1.0.0.zip`.
-- Final verification size: 808536 bytes.
-- Final verification SHA-256: `E9B92D1497987B8957B7EDF1283AD41333FF4B2F6DFCC38F440083938FE7E0AC`.
+- Repository copy produced by the final `install.ps1`: 808622 bytes, SHA-256 `FB72BC59E7F184766F254F0819A170C66EAD69A66B7E87BA0754936B2278BEC0`.
+- Final verification ZIP: `build-final-release8/distributions/copilot-context-bridge-1.0.0.zip`.
+- Final verification size: 808622 bytes.
+- Final verification SHA-256: `FB72BC59E7F184766F254F0819A170C66EAD69A66B7E87BA0754936B2278BEC0`.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
 - `install.ps1` completed successfully, rebuilt the current source and copied the ZIP into the repository distribution folder.
 - The installer now runs `clean buildPlugin` in its isolated build directory before packaging, preventing stale Kotlin classes from leaking into a later install.
@@ -51,6 +51,8 @@ The final Batch-row smoke test also verified that `Copy files`, `Copy text`, `Op
 The corresponding `Copy files` assertion exposed a real `javaFileListFlavor` list containing the staged `00_REPO_CONTEXT.md`, `README.md`, `src/main/kotlin/nl/ferron/copilotcontextbridge/settings/AppSettings.kt` and generated automatic attachment, rather than a text-only paste.
 
 The current live session selector was also exercised after reinstall (`10b01161 · 6 batches`); the historical-session screenshots above show switching back to a previous session without losing its batch history.
+
+Additional live rows completed in this audit are recorded in `live-pycharm-test-matrix.md`: narrow-window responsive layout, repeated More navigation, Project View submenu actions, Return Instructions, Next batch reset, Guidelines, Prompt Library, Settings, retained Context Preview, Preview-to-Batch navigation in the wide split layout and a second-batch kickoff prompt. The settings screenshot specifically verifies the previously ambiguous entries now render as `Copilot Context Bridge (Application)` and `Copilot Context Bridge (Project)`.
 
 ## Visual acceptance status
 

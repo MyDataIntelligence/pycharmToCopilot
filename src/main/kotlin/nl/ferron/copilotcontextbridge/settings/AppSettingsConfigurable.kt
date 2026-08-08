@@ -26,7 +26,7 @@ class AppSettingsConfigurable : Configurable {
     private val excludedExtensions = JBTextArea(12, 70)
     private val retention = JSpinner(SpinnerNumberModel(7, 1, 365, 1))
 
-    override fun getDisplayName() = "Copilot Context Bridge"
+    override fun getDisplayName() = "Copilot Context Bridge (Application)"
 
     override fun createComponent(): JComponent =
         JBTabbedPane().apply {

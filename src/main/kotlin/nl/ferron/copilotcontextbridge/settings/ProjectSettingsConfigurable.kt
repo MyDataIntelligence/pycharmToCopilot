@@ -46,7 +46,7 @@ class ProjectSettingsConfigurable(
     private val scores = JBTextArea(16, 60)
     private val postApplyCommand = JBTextField()
 
-    override fun getDisplayName() = "Copilot Context Bridge"
+    override fun getDisplayName() = "Copilot Context Bridge (Project)"
 
     override fun createComponent(): JComponent =
         JBTabbedPane().apply {
