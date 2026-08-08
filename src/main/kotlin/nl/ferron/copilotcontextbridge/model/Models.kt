@@ -31,6 +31,8 @@ data class DependencyRelation(
     val confidence: RelationConfidence,
     val depth: Int = 1,
     val evidence: String = "",
+    val fromRepositoryId: String = "",
+    val toRepositoryId: String = "",
 )
 
 data class ContextCandidate(

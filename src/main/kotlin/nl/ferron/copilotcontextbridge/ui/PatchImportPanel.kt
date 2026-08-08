@@ -40,6 +40,11 @@ import javax.swing.JPanel
 import javax.swing.SwingConstants
 import javax.swing.TransferHandler
 
+internal fun canApplySelected(
+    amount: Int,
+    unresolved: Int,
+): Boolean = amount > 0 && unresolved == 0
+
 /** Secure inbound workflow for complete Python-function replacements. */
 class PatchImportPanel(
     private val project: Project,
@@ -475,7 +480,7 @@ class PatchImportPanel(
             if (unresolved == 0) "Apply selected ($amount)" else "Apply selected ($amount) — resolve $unresolved conflict(s)"
         applyButton.toolTipText =
             if (unresolved == 0) null else "Apply is blocked until each selected conflict has an explicit resolution."
-        applyButton.isEnabled = current?.validation?.errors?.isEmpty() == true && amount > 0
+        applyButton.isEnabled = current?.validation?.errors?.isEmpty() == true && canApplySelected(amount, unresolved)
     }
 
     private fun applySelected() {
@@ -596,9 +601,17 @@ class PatchImportPanel(
     private fun validationFingerprint(result: PatchValidator.Result): List<String> =
         result.targets.map { target ->
             val item = target.validated
+            val hash =
+                if (item.request.operation.endsWith("_file")) {
+                    target.file?.let(nl.ferron.copilotcontextbridge.patch.FileContentHasher::hash)
+                        ?: nl.ferron.copilotcontextbridge.patch.FileContentHasher
+                            .hash(item.oldText)
+                } else {
+                    nl.ferron.copilotcontextbridge.analysis.FunctionHasher
+                        .hash(item.oldText)
+                }
             "${item.request.path}::${item.request.qualifiedName}:${item.status}:" +
-                nl.ferron.copilotcontextbridge.analysis.FunctionHasher
-                    .hash(item.oldText)
+                hash
         }
 
     private fun applyConfirmationMessage(

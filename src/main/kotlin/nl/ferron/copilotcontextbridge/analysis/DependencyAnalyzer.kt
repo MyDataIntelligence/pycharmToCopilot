@@ -8,6 +8,7 @@ import com.jetbrains.python.psi.PyFile
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.context.ContextPolicyProjection
 import nl.ferron.copilotcontextbridge.context.ContextResolverRegistry
+import nl.ferron.copilotcontextbridge.context.ResolverExecutionContext
 import nl.ferron.copilotcontextbridge.context.ResolverStrategy
 import nl.ferron.copilotcontextbridge.context.contextResolvers
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
@@ -317,6 +318,29 @@ class DependencyAnalyzer(
             candidateDepths[target] = minOf(candidateDepths[target] ?: Int.MAX_VALUE, 1)
             relations += DependencyRelation(source, target, type, RelationConfidence.INFERRED, evidence = evidence)
         }
+
+        activePolicy.rules
+            .asSequence()
+            .filter { it.enabled }
+            .mapNotNull { rule -> ContextResolverRegistry.handler(rule.resolver)?.let { it to rule } }
+            .forEach { (handler, rule) ->
+                handler.resolve(
+                    ResolverExecutionContext(
+                        snapshot = snapshot,
+                        seedPaths = seedPaths,
+                        candidatePaths = candidatePaths,
+                        candidateDepths = candidateDepths,
+                        relations = relations,
+                        symbols = symbols,
+                        include = { source, target, type, evidence, confidence, depth ->
+                            candidatePaths += target
+                            candidateDepths[target] = minOf(candidateDepths[target] ?: Int.MAX_VALUE, depth)
+                            relations += DependencyRelation(source, target, type, confidence, depth, evidence)
+                        },
+                    ),
+                    rule,
+                )
+            }
 
         firstRule(ResolverStrategy.TEST_FIXTURES)?.let { rule ->
             val tests = candidatePaths.filter { it.substringAfterLast('/').startsWith("test_") || "/tests/" in "/$it" }

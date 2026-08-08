@@ -2,7 +2,7 @@
 
 The primary format is UTF-8 JSON. The importer also accepts `.json` only after schema sniffing, and ZIP packages with `changes.json` at archive root. Required root fields are `formatVersion: 1`, `repositoryId`, `sessionId`, and one or more entries in `replacements`. `summary` is strongly recommended.
 
-Paths must already be canonical repository-relative `.py` paths. Hashes use exactly `sha256:` plus 64 lowercase hexadecimal characters. A patch cannot contain duplicate target identities, and a whole-file operation cannot be combined with another operation for the same file.
+Paths must already be canonical repository-relative paths. Function operations require `.py` targets; whole-file operations (`add_file`, `replace_file`, `delete_file`) also support safe text files such as Markdown, YAML, JSON, PowerShell and batch files. Hashes use exactly `sha256:` plus 64 lowercase hexadecimal characters. A patch cannot contain duplicate target identities, and a whole-file operation cannot be combined with another operation for the same file.
 
 ## Operations
 

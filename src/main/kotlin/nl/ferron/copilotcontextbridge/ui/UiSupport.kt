@@ -20,7 +20,8 @@ object UiSupport {
             .notify(project)
     }
 
-    fun copyText(text: String) {
-        Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
-    }
+    fun copyText(text: String): Boolean =
+        runCatching {
+            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+        }.isSuccess
 }

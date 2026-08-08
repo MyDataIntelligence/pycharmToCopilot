@@ -6,6 +6,21 @@ import com.intellij.openapi.components.Storage
 
 @State(name = "CopilotContextBridgeProject", storages = [Storage(".idea/copilot-context-bridge.xml")])
 class ProjectSettings : PersistentStateComponent<ProjectSettings.Data> {
+    /** Safe, non-content metadata needed to restore an external selection by source key. */
+    class ExternalSourceLocation {
+        @JvmField var sourceKey: String = ""
+
+        @JvmField var repositoryId: String = ""
+
+        @JvmField var repositoryName: String = ""
+
+        @JvmField var repositoryRoot: String = ""
+
+        @JvmField var relativePath: String = ""
+
+        @JvmField var kind: String = "PINNED_FILE"
+    }
+
     class Data {
         @JvmField var maximumUploadFiles: Int = 20
 
@@ -74,6 +89,13 @@ class ProjectSettings : PersistentStateComponent<ProjectSettings.Data> {
          * also prevents a restart from accidentally broadening a previously scoped exclusion.
          */
         @JvmField var externalSessionExcludedSourceKeys: MutableMap<String, MutableList<String>> = mutableMapOf()
+
+        /**
+         * Stable source-key locations retained after a batch is staged.  This is deliberately
+         * separate from ContextSelectionService.paths: an external repository path must never be
+         * interpreted as a path in the currently opened project when a historical batch is restored.
+         */
+        @JvmField var externalSourceLocations: MutableList<ExternalSourceLocation> = mutableListOf()
 
         @JvmField var postApplyCommand: String = ""
 

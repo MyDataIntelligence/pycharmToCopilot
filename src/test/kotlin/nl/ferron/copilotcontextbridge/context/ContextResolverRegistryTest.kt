@@ -1,11 +1,13 @@
 package nl.ferron.copilotcontextbridge.context
 
 import junit.framework.TestCase
+import nl.ferron.copilotcontextbridge.analysis.RepositoryScanner
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.DependencyRelation
 import nl.ferron.copilotcontextbridge.model.RelationConfidence
 import nl.ferron.copilotcontextbridge.model.RelationType
 import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
+import nl.ferron.copilotcontextbridge.settings.ContextRuleState
 import java.nio.file.Path
 
 class ContextResolverRegistryTest : TestCase() {
@@ -64,5 +66,61 @@ class ContextResolverRegistryTest : TestCase() {
         }
         assertNull(ContextResolverRegistry.find(metadata.id))
         assertFalse(ContextResolverRegistry.unregister("python.directImports"))
+    }
+
+    fun testAddOnResolverCanExposeExecutableHandler() {
+        val metadata =
+            ContextResolverMetadata(
+                "custom.executable",
+                "Executable custom resolver",
+                "Test-only dynamically registered resolver.",
+                ResolverCategory.REPOSITORY,
+                setOf(RelationType.SAME_PACKAGE),
+                ResolverStrategy.TRAVERSAL,
+            )
+        var invoked = false
+
+        ContextResolverRegistry.register(
+            metadata,
+            ContextResolverHandler { context, rule ->
+                invoked = true
+                assertEquals("custom-rule", rule.id)
+                context.include(
+                    context.seedPaths.first(),
+                    "src/custom.py",
+                    RelationType.SAME_PACKAGE,
+                    "dynamic resolver",
+                    RelationConfidence.CONFIRMED,
+                    1,
+                )
+            },
+        )
+        try {
+            val handler = ContextResolverRegistry.handler(metadata.id)
+            assertNotNull(handler)
+            val candidates = linkedSetOf<String>()
+            val depths = mutableMapOf<String, Int>()
+            val relations = mutableListOf<DependencyRelation>()
+            handler!!.resolve(
+                ResolverExecutionContext(
+                    RepositoryScanner.Snapshot(emptyList(), emptyList()),
+                    setOf("src/app.py"),
+                    candidates,
+                    depths,
+                    relations,
+                    emptyMap(),
+                ) { source, target, type, evidence, confidence, depth ->
+                    candidates += target
+                    depths[target] = depth
+                    relations += DependencyRelation(source, target, type, confidence, depth, evidence)
+                },
+                ContextRuleState("custom-rule", metadata.id, 100),
+            )
+            assertTrue(invoked)
+            assertEquals(setOf("src/custom.py"), candidates)
+            assertEquals(RelationConfidence.CONFIRMED, relations.single().confidence)
+        } finally {
+            assertTrue(ContextResolverRegistry.unregister(metadata.id))
+        }
     }
 }

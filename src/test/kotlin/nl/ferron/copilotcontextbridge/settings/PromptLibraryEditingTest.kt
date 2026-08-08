@@ -115,6 +115,17 @@ class PromptLibraryEditingTest : TestCase() {
         assertEquals(listOf(builtIn.id), skills.map { it.id })
     }
 
+    fun testImportingCustomOnlyLibraryPreservesBuiltInsAndAddsCustomEntry() {
+        val custom = AppSettings.PromptSkillState("imported-custom", "Imported", "", "Prompt")
+
+        val merged = PromptSkillLibraryEditor.mergeImported(listOf(custom))
+
+        assertEquals("general-change", merged.first().id)
+        assertEquals(DevelopmentPromptLibrary.NEW_CODE_ID, merged[1].id)
+        assertTrue(merged.any { it.id == custom.id })
+        assertEquals(1, merged.count { it.id == custom.id })
+    }
+
     fun testPolicyWorkingCopyCanBeCommittedWithoutSharingRuleState() {
         val original = AppSettings.defaultPolicyForPrompt("general-change")
         val working = original.copyOf()

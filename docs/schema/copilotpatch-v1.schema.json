@@ -32,8 +32,9 @@
     },
     "path": {
       "type": "string",
-      "minLength": 4,
-      "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).*\\.py$"
+      "minLength": 1,
+      "description": "Canonical repository-relative path. Function operations require a .py path; whole-file operations may target safe text files.",
+      "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+"
     },
     "hash": {
       "type": "string",

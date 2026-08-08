@@ -10,6 +10,7 @@ import com.jetbrains.python.psi.PyFile
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.analysis.FunctionHasher
 import nl.ferron.copilotcontextbridge.context.ContextPackService
+import nl.ferron.copilotcontextbridge.external.ExternalRepositorySelectionRegistry
 import nl.ferron.copilotcontextbridge.model.AttachmentKind
 import nl.ferron.copilotcontextbridge.model.ContextPack
 import nl.ferron.copilotcontextbridge.model.PlannedAttachment
@@ -135,6 +136,14 @@ class StagingService(
             val manifest = metadata.resolve("context-session.json")
             Files.writeString(manifest, GsonBuilder().setPrettyPrinting().create().toJson(manifestData), StandardCharsets.UTF_8)
             val skill = AppSettings.getInstance().skill(pack.promptSkillId)
+            // Persist source-key locations for external candidates before recording the batch.
+            // ContextSelectionService intentionally stores only display paths; without this
+            // metadata a later Restore action could mistake an external path for a current-project
+            // path (or silently lose a discovered external file after a restart).
+            val externalRegistry = project.getService(ExternalRepositorySelectionRegistry::class.java)
+            pack.selection.included
+                .filter { it.repositoryId.isNotBlank() }
+                .forEach(externalRegistry::rememberCandidate)
             project.getService(ContextSelectionService::class.java).markExported(
                 pack.sessionId,
                 skill.name,

@@ -66,6 +66,16 @@ class CopilotPatchParserTest {
         assertEquals("VALUE = 2\n", replacement.replacement)
     }
 
+    @Test fun `structured whole file operations support non Python text paths`() {
+        val json =
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"replace_file","path":"scripts/install.ps1","originalHash":"$VALID_HASH","replacement":"Write-Output 'updated'\n"}]}"""
+
+        val replacement = CopilotPatchParser().parseJson(json).replacements.single()
+
+        assertEquals("scripts/install.ps1", replacement.path)
+        assertEquals("Write-Output 'updated'\n", replacement.replacement)
+    }
+
     @Test fun `utf8 bom is accepted for structured json and zip snippet`() {
         val changes =
             "\uFEFF" +

@@ -221,7 +221,7 @@ class PromptSkillsPanel(
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             runCatching {
                 val imported = PromptSkillLibraryCodec.decode(Files.readString(chooser.selectedFile.toPath()))
-                AppSettings.getInstance().state.promptSkills = imported.toMutableList()
+                AppSettings.getInstance().state.promptSkills = PromptSkillLibraryEditor.mergeImported(imported)
                 refresh(0)
                 onLibraryChanged()
             }.onFailure { showError("Skill import rejected", it.message ?: "Invalid skill library") }

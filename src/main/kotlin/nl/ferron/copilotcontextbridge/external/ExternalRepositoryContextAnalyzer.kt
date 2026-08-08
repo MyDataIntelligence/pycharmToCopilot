@@ -6,6 +6,7 @@ import nl.ferron.copilotcontextbridge.model.ContextCandidate
 import nl.ferron.copilotcontextbridge.model.DependencyRelation
 import nl.ferron.copilotcontextbridge.model.RelationConfidence
 import nl.ferron.copilotcontextbridge.model.RelationType
+import nl.ferron.copilotcontextbridge.model.sourceKey
 import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -21,6 +22,8 @@ class ExternalRepositoryContextAnalyzer(
     ): List<ContextCandidate> {
         if (discovered.isEmpty()) return emptyList()
         val seedTexts = seeds.associateWith(::readText)
+        val allSources = (seeds + discovered).distinctBy { it.sourceKey }
+        val allTexts = allSources.associateWith(::readText)
         return discovered.map { candidate ->
             val relations = mutableListOf<DependencyRelation>()
             if (policy.isEnabled("python.matchingTests") && isTest(candidate.relativePath)) {
@@ -40,7 +43,7 @@ class ExternalRepositoryContextAnalyzer(
                 }
             }
             if (policy.isEnabled("text.referencedConfiguration") && isConfiguration(candidate.relativePath)) {
-                seedTexts.filterValues { it != null }.forEach { (seed, text) ->
+                allTexts.filterValues { it != null }.forEach { (seed, text) ->
                     if (references(text.orEmpty(), candidate.relativePath)) {
                         relations +=
                             relation(
@@ -52,6 +55,35 @@ class ExternalRepositoryContextAnalyzer(
                     }
                 }
             }
+            if (policy.isEnabled("python.transitiveImports") && candidate.relativePath.endsWith(".py", true)) {
+                val transitiveSources = allSources.filter { it !in seeds && it.relativePath.endsWith(".py", true) }
+                transitiveSources.forEach { source ->
+                    val text = allTexts[source].orEmpty()
+                    if (importsAny(text, moduleNames(candidate.relativePath))) {
+                        relations +=
+                            relation(
+                                source,
+                                candidate,
+                                RelationType.SECOND_LEVEL,
+                                "external repository transitive Python import",
+                            )
+                    }
+                }
+            }
+            if (policy.isEnabled("tests.fixtures") && isFixture(candidate.relativePath)) {
+                allSources
+                    .filter { source -> source.relativePath.endsWith(".py", true) && isTest(source.relativePath) }
+                    .forEach { source ->
+                        relations += relation(source, candidate, RelationType.TEST_FIXTURE, "external repository test fixture")
+                    }
+            }
+            if (policy.isEnabled("repository.templates") && isTemplate(candidate.relativePath)) {
+                val candidateExtension = candidate.relativePath.substringAfterLast('.', "").lowercase()
+                if (seeds.any { it.relativePath.substringAfterLast('.', "").lowercase() == candidateExtension }) {
+                    relations +=
+                        relation(seeds.first(), candidate, RelationType.TEMPLATE, "external repository template/example")
+                }
+            }
             if (instructionResolver(candidate.relativePath) != null) {
                 relations +=
                     DependencyRelation(
@@ -60,6 +92,8 @@ class ExternalRepositoryContextAnalyzer(
                         RelationType.INSTRUCTION,
                         RelationConfidence.CONFIRMED,
                         evidence = "external repository instruction file",
+                        fromRepositoryId = seeds.firstOrNull()?.repositoryId.orEmpty(),
+                        toRepositoryId = candidate.repositoryId,
                     )
             }
             val effectiveRelations = relations.distinct()
@@ -107,7 +141,15 @@ class ExternalRepositoryContextAnalyzer(
         target: ContextCandidate,
         type: RelationType,
         evidence: String,
-    ) = DependencyRelation(seed.relativePath, target.relativePath, type, RelationConfidence.INFERRED, evidence = evidence)
+    ) = DependencyRelation(
+        seed.relativePath,
+        target.relativePath,
+        type,
+        RelationConfidence.INFERRED,
+        evidence = evidence,
+        fromRepositoryId = seed.repositoryId,
+        toRepositoryId = target.repositoryId,
+    )
 
     private fun score(relations: List<DependencyRelation>): Int =
         relations
@@ -164,6 +206,14 @@ class ExternalRepositoryContextAnalyzer(
 
     private fun isConfiguration(path: String): Boolean =
         path.substringAfterLast('.', "").lowercase() in setOf("json", "yaml", "yml", "toml", "ini", "cfg", "xml")
+
+    private fun isFixture(path: String): Boolean =
+        path.substringAfterLast('/').equals("conftest.py", ignoreCase = true) || "/fixtures/" in "/${path.lowercase()}/"
+
+    private fun isTemplate(path: String): Boolean {
+        val lower = "/${path.lowercase()}/"
+        return "/templates/" in lower || "/examples/" in lower || "/template" in lower
+    }
 
     companion object {
         private val IMPORT_PATTERN = Regex("(?m)^\\s*(?:from\\s+([A-Za-z0-9_.]+)\\s+import|import\\s+([A-Za-z0-9_.]+))")

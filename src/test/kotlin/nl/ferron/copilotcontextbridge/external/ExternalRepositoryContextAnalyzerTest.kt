@@ -54,6 +54,51 @@ class ExternalRepositoryContextAnalyzerTest : TestCase() {
         }
     }
 
+    fun testExternalPolicyAddsTransitiveImportsFixturesAndTemplates() {
+        val root = Files.createTempDirectory("external-context-policy")
+        try {
+            val seed = candidate(root, "src/main.py", "from src.service import run\n")
+            val service = candidate(root, "src/service.py", "from src.shared import helper\n")
+            val discovered =
+                listOf(
+                    service,
+                    candidate(root, "src/shared.py", "def helper(): pass\n"),
+                    candidate(root, "tests/test_main.py", "def test_main(): pass\n"),
+                    candidate(root, "tests/conftest.py", "import pytest\n"),
+                    candidate(root, "templates/module.py", "def template(): pass\n"),
+                )
+            val policy =
+                ContextPolicyState.defaultFor("external-policy").apply {
+                    rule("transitive-imports")!!.enabled = true
+                    rule("test-fixtures")!!.enabled = true
+                    rule("templates")!!.enabled = true
+                }
+
+            val analyzed = ExternalRepositoryContextAnalyzer(policy, 100_000).analyze(listOf(seed), discovered)
+
+            assertTrue(
+                analyzed
+                    .single { it.relativePath == "src/shared.py" }
+                    .relations
+                    .any { it.type == RelationType.SECOND_LEVEL },
+            )
+            assertTrue(
+                analyzed
+                    .single { it.relativePath == "tests/conftest.py" }
+                    .relations
+                    .any { it.type == RelationType.TEST_FIXTURE },
+            )
+            assertTrue(
+                analyzed
+                    .single { it.relativePath == "templates/module.py" }
+                    .relations
+                    .any { it.type == RelationType.TEMPLATE },
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     private fun candidate(
         root: Path,
         relative: String,

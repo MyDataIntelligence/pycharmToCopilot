@@ -1212,30 +1212,60 @@ class CopilotContextPanel(
         val result = staged ?: return
         val transferable =
             FileListTransferable(result.files.map { it.stagedPath.toFile() }, result.files.joinToString("\n") { it.relativePath })
-        java.awt.Toolkit
-            .getDefaultToolkit()
-            .systemClipboard
-            .setContents(transferable, null)
+        val copied =
+            runCatching {
+                java.awt.Toolkit
+                    .getDefaultToolkit()
+                    .systemClipboard
+                    .setContents(transferable, null)
+            }.isSuccess
+        if (!copied) {
+            UiSupport.notify(
+                project,
+                "Files could not be copied",
+                "The system clipboard is unavailable or busy. Use Open staged batch folder instead.",
+                NotificationType.ERROR,
+            )
+            return
+        }
         markCurrentBatchHandedOff()
         UiSupport.notify(project, "Files copied", "${result.files.size} files are ready to paste into Copilot.")
     }
 
     private fun copyCompletePackAsText() {
         val result = staged ?: return
-        UiSupport.copyText(
-            CombinedContextTextBuilder.build(
-                AppSettings.getInstance().state.combinedTextIntro,
-                result.files,
-                kickoffPrompt.text,
-            ),
-        )
+        val copied =
+            UiSupport.copyText(
+                CombinedContextTextBuilder.build(
+                    AppSettings.getInstance().state.combinedTextIntro,
+                    result.files,
+                    kickoffPrompt.text,
+                ),
+            )
+        if (!copied) {
+            UiSupport.notify(
+                project,
+                "Complete pack could not be copied",
+                "The system clipboard is unavailable or busy. Use Copy files or Open staged batch folder instead.",
+                NotificationType.ERROR,
+            )
+            return
+        }
         markCurrentBatchHandedOff()
         UiSupport.notify(project, "Complete pack copied", "Metadata, paths and ${result.files.size} file contents were copied as text.")
     }
 
     private fun copyKickoffPrompt() {
         if (staged == null || kickoffPrompt.text.isBlank()) return
-        UiSupport.copyText(kickoffPrompt.text)
+        if (!UiSupport.copyText(kickoffPrompt.text)) {
+            UiSupport.notify(
+                project,
+                "Copilot prompt could not be copied",
+                "The system clipboard is unavailable or busy. Select the prompt text manually.",
+                NotificationType.ERROR,
+            )
+            return
+        }
         UiSupport.notify(project, "Copilot prompt copied", "Paste this prompt after uploading the prepared files.")
     }
 

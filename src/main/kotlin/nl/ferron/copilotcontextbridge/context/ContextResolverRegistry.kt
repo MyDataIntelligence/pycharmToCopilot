@@ -1,6 +1,10 @@
 package nl.ferron.copilotcontextbridge.context
 
+import nl.ferron.copilotcontextbridge.analysis.RepositoryScanner
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
+import nl.ferron.copilotcontextbridge.model.DependencyRelation
+import nl.ferron.copilotcontextbridge.model.PythonSymbol
+import nl.ferron.copilotcontextbridge.model.RelationConfidence
 import nl.ferron.copilotcontextbridge.model.RelationType
 import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
 import nl.ferron.copilotcontextbridge.settings.ContextRuleState
@@ -18,6 +22,24 @@ data class ContextResolverMetadata(
     val relationTypes: Set<RelationType>,
     val strategy: ResolverStrategy,
 )
+
+/** Mutable analysis surface exposed to dynamically registered resolver handlers. */
+data class ResolverExecutionContext(
+    val snapshot: RepositoryScanner.Snapshot,
+    val seedPaths: Set<String>,
+    val candidatePaths: MutableSet<String>,
+    val candidateDepths: MutableMap<String, Int>,
+    val relations: MutableList<DependencyRelation>,
+    val symbols: Map<String, List<PythonSymbol>>,
+    val include: (source: String, target: String, type: RelationType, evidence: String, confidence: RelationConfidence, depth: Int) -> Unit,
+)
+
+fun interface ContextResolverHandler {
+    fun resolve(
+        context: ResolverExecutionContext,
+        rule: ContextRuleState,
+    )
+}
 
 /** Single registry for policy dispatch, candidate provenance and attachment packing. */
 object ContextResolverRegistry {
@@ -140,6 +162,7 @@ object ContextResolverRegistry {
         )
     private val builtInIds = registered.mapTo(hashSetOf()) { it.id }
     private val byId = LinkedHashMap(registered.associateBy(ContextResolverMetadata::id))
+    private val handlers = LinkedHashMap<String, ContextResolverHandler>()
 
     @Synchronized
     fun all(): List<ContextResolverMetadata> = byId.values.toList()
@@ -155,9 +178,28 @@ object ContextResolverRegistry {
         byId[metadata.id] = metadata
     }
 
+    /** Registers metadata and executable behavior for a resolver supplied by an extension/plugin. */
+    @Synchronized
+    fun register(
+        metadata: ContextResolverMetadata,
+        handler: ContextResolverHandler,
+    ) {
+        register(metadata)
+        handlers[metadata.id] = handler
+    }
+
+    @Synchronized
+    fun handler(id: String): ContextResolverHandler? = handlers[id]
+
     /** Removes an add-on resolver; built-ins remain stable for persisted policies. */
     @Synchronized
-    fun unregister(id: String): Boolean = id !in builtInIds && byId.remove(id) != null
+    fun unregister(id: String): Boolean =
+        if (id !in builtInIds) {
+            handlers.remove(id)
+            byId.remove(id) != null
+        } else {
+            false
+        }
 
     @Synchronized
     fun resolversFor(type: RelationType): Set<String> = byId.values.filter { type in it.relationTypes }.mapTo(linkedSetOf()) { it.id }

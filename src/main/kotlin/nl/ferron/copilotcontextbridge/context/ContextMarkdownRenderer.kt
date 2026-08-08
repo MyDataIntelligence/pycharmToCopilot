@@ -152,10 +152,7 @@ object ContextMarkdownRenderer {
             appendLine()
             input.relations
                 .filter { relation ->
-                    input.selection.included.any {
-                        it.relativePath == relation.from ||
-                            it.relativePath == relation.to
-                    }
+                    relationMatchesIncluded(relation, input.selection.included)
                 }.distinct()
                 .forEach {
                     appendLine(
@@ -250,19 +247,70 @@ object ContextMarkdownRenderer {
         selection: RankedSelection,
         target: StringBuilder,
     ) {
-        val paths = selection.included.map { it.relativePath }.toSet()
-        val relevant = relations.filter { it.from in paths && it.to in paths }.distinct()
+        val included = selection.included
+        val relevant = relations.filter { relation -> relationEndpointsIncluded(relation, included) }.distinct()
         if (relevant.isEmpty()) return
         target.appendLine()
         target.appendLine("```mermaid")
         target.appendLine("flowchart LR")
-        val ids = paths.sorted().associateWith { "n" + FunctionHasherAdapter.short(it) }
-        ids.forEach { (path, id) -> target.appendLine("    $id[\"${path.replace("\"", "'")}\"]") }
+        val keys =
+            relevant
+                .flatMap { relation ->
+                    listOf(
+                        relationEndpointKey(relation.from, relation.fromRepositoryId, included),
+                        relationEndpointKey(relation.to, relation.toRepositoryId, included),
+                    )
+                }.filterNotNull()
+                .toSet()
+        val duplicatePaths =
+            included
+                .groupingBy { it.relativePath }
+                .eachCount()
+                .filterValues { it > 1 }
+                .keys
+        val ids = keys.sorted().associateWith { "n" + FunctionHasherAdapter.short(it) }
+        ids.forEach { (key, id) ->
+            val candidate = included.first { it.sourceKey == key }
+            val label =
+                if (candidate.relativePath in duplicatePaths) {
+                    "${repositoryLabel(candidate, "repository")}: ${candidate.relativePath}"
+                } else {
+                    candidate.relativePath
+                }
+            target.appendLine("    $id[\"${label.replace("\"", "'")}\"]")
+        }
         relevant.forEach { relation ->
-            target.appendLine("    ${ids[relation.from]} -->|${relation.type.name.lowercase()}| ${ids[relation.to]}")
+            val from = relationEndpointKey(relation.from, relation.fromRepositoryId, included)
+            val to = relationEndpointKey(relation.to, relation.toRepositoryId, included)
+            if (from != null && to != null) {
+                target.appendLine("    ${ids.getValue(from)} -->|${relation.type.name.lowercase()}| ${ids.getValue(to)}")
+            }
         }
         target.appendLine("```")
     }
+
+    private fun relationMatchesIncluded(
+        relation: DependencyRelation,
+        included: List<ContextCandidate>,
+    ): Boolean = relationEndpointsIncluded(relation, included)
+
+    private fun relationEndpointsIncluded(
+        relation: DependencyRelation,
+        included: List<ContextCandidate>,
+    ): Boolean =
+        relationEndpointKey(relation.from, relation.fromRepositoryId, included) != null &&
+            relationEndpointKey(relation.to, relation.toRepositoryId, included) != null
+
+    private fun relationEndpointKey(
+        path: String,
+        repositoryId: String,
+        included: List<ContextCandidate>,
+    ): String? =
+        included
+            .firstOrNull { candidate ->
+                candidate.relativePath == path &&
+                    (repositoryId.isBlank() || candidate.repositoryId == repositoryId)
+            }?.sourceKey
 
     private object FunctionHasherAdapter {
         fun short(value: String): String =

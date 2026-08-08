@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import nl.ferron.copilotcontextbridge.ProjectRoot
+import nl.ferron.copilotcontextbridge.external.ExternalRepositorySelectionRegistry
 import nl.ferron.copilotcontextbridge.model.BatchSummary
 import nl.ferron.copilotcontextbridge.security.PathSafety
 import java.time.Instant
@@ -84,6 +85,12 @@ class ContextSelectionService(
         val id: String,
         val batchCount: Int,
         val latestCreatedAt: String,
+    )
+
+    data class BatchRestoreResult(
+        val restoredCurrentPaths: List<String>,
+        val restoredExternalSourceKeys: List<String>,
+        val unresolvedExternalSourceKeys: List<String>,
     )
 
     private var data = Data()
@@ -377,9 +384,45 @@ class ContextSelectionService(
         validatePaths()
     }
 
-    fun restoreBatch(sessionId: String) {
-        val batch = data.batches.firstOrNull { it.sessionId == sessionId } ?: return
-        addRelativePaths(batch.paths)
+    /**
+     * Restores a historical batch without treating external repository paths as paths in the
+     * currently opened project.  New batches persist sourceKeys alongside the display paths;
+     * legacy batches fall back to their paths because no repository identity was recorded.
+     */
+    fun restoreBatch(sessionId: String): BatchRestoreResult {
+        val batch =
+            data.batches
+                .firstOrNull { it.sessionId == sessionId }
+                ?: return BatchRestoreResult(emptyList(), emptyList(), emptyList())
+        val sourceKeys = batch.sourceKeys.ifEmpty { batch.paths }
+        val externalByIndex =
+            if (batch.sourceKeys.size == batch.paths.size) {
+                batch.paths.mapIndexedNotNull { index, path ->
+                    sourceKeys.getOrNull(index)?.takeIf { it.contains("::") }?.let { it to path }
+                }
+            } else {
+                emptyList()
+            }
+        val externalKeys = externalByIndex.mapTo(linkedSetOf()) { it.first }
+        val currentPaths =
+            if (batch.sourceKeys.size == batch.paths.size) {
+                batch.paths.filterIndexed { index, _ -> sourceKeys.getOrNull(index)?.contains("::") != true }
+            } else {
+                // Prior versions had no source identity. Preserve their established behavior.
+                batch.paths
+            }
+        addRelativePaths(currentPaths)
+        val externalResult =
+            if (externalKeys.isEmpty()) {
+                ExternalRepositorySelectionRegistry.RestoreResult(emptyList(), emptyList())
+            } else {
+                project.getService(ExternalRepositorySelectionRegistry::class.java).restoreSourceKeys(externalKeys)
+            }
+        return BatchRestoreResult(
+            currentPaths,
+            externalResult.restored.map { it.key },
+            externalResult.unresolved,
+        )
     }
 
     fun markHandedOff(sessionId: String) {

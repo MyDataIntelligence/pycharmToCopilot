@@ -43,6 +43,31 @@ class DiffFacadeTest : BasePlatformTestCase() {
         assertEquals("def run():\n    return 1\n", (request.contents.first() as com.intellij.diff.contents.DocumentContent).document.text)
     }
 
+    fun testWholeFileNonPythonDiffUsesTheTargetFileType() {
+        val request =
+            JetBrainsDiffFacade(project).createRequest(
+                replacement(
+                    ReplacementStatus.MATCH,
+                    base = "",
+                ).copy(
+                    request =
+                        FunctionReplacement(
+                            operation = "replace_file",
+                            path = "config/settings.yaml",
+                            qualifiedName = FILE_OPERATION_QUALIFIED_NAME,
+                            originalHash = "sha256:base",
+                            replacement = "enabled: false\n",
+                            replacementFile = null,
+                        ),
+                    oldText = "enabled: true\n",
+                    newText = "enabled: false\n",
+                ),
+            ) { _, _, _ -> }
+
+        val type = (request.contents.first() as com.intellij.diff.contents.DocumentContent).contentType
+        assertEquals("YAML", type?.name)
+    }
+
     private fun replacement(
         status: ReplacementStatus,
         base: String,

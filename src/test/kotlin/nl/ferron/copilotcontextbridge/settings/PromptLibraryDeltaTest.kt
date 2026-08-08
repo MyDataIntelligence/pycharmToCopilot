@@ -122,7 +122,7 @@ class PromptLibraryDeltaTest {
         assertEquals("User stories", migrated.category)
         assertEquals("custom create-story instructions", migrated.prompt)
         assertEquals(
-            listOf("General change", "Debug problem", "Generate tests", "Review code"),
+            listOf("General change", "New reusable Python code", "Debug problem", "Generate tests"),
             settings.state.promptSkills
                 .take(4)
                 .map { it.name },

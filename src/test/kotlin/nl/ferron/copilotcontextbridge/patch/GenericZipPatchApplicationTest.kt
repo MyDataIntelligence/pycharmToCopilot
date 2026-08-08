@@ -137,4 +137,45 @@ class GenericZipPatchApplicationTest : BasePlatformTestCase() {
         assertTrue(validation.targets.none { it.validated.message.contains("binary", ignoreCase = true) })
         assertTrue(validation.targets.none { it.validated.selected })
     }
+
+    fun testDeleteFileValidatesAndAppliesForNonPythonPsiFiles() {
+        val file = myFixture.addFileToProject("config/settings.yaml", "enabled: true\n")
+        val request =
+            FunctionReplacement(
+                "delete_file",
+                "config/settings.yaml",
+                FILE_OPERATION_QUALIFIED_NAME,
+                FileContentHasher.hash(file),
+                null,
+                null,
+            )
+        val root = myFixture.tempDirFixture.getFile("config")!!.parent
+        val validation =
+            PatchValidator(
+                project,
+                testRepositoryId = project.name,
+                testRootVirtualFile = root,
+            ).validate(CopilotPatch(1, project.name, "generic-delete-yaml", listOf(request)))
+
+        assertTrue(validation.validation.errors.isEmpty())
+        assertEquals(
+            ReplacementStatus.MATCH,
+            validation.targets
+                .single()
+                .validated
+                .status,
+        )
+        assertTrue(
+            validation.targets
+                .single()
+                .validated
+                .selected,
+        )
+
+        val key = "config/settings.yaml::$FILE_OPERATION_QUALIFIED_NAME"
+        val result = PythonFunctionReplacementService(project).apply(validation, setOf(key), emptySet())
+
+        assertEquals(listOf("config/settings.yaml:$FILE_OPERATION_QUALIFIED_NAME"), result.applied)
+        assertNull(myFixture.findFileInTempDir("config/settings.yaml"))
+    }
 }

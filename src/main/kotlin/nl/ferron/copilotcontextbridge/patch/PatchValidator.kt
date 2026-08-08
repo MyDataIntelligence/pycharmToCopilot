@@ -83,7 +83,11 @@ class PatchValidator(
                                 validateFileReplacement(request, file)
                             }
                             "delete_file" -> {
-                                val file = testFileResolver?.invoke(relative) ?: resolveProjectFile(checkNotNull(root), rootVf, relative)
+                                // A complete-file deletion is not a Python-only operation.  Keep
+                                // function operations Python/PSI-specific, but resolve delete
+                                // targets through the generic PsiFile path so JSON/YAML/Markdown
+                                // and other project text files can be reviewed and hash-checked.
+                                val file = testFileResolver?.invoke(relative) ?: resolveProjectPsiFile(root, rootVf, relative)
                                 validateFileDeletion(request, file)
                             }
                             "add_function" -> {
@@ -288,7 +292,7 @@ class PatchValidator(
 
     private fun validateFileDeletion(
         request: FunctionReplacement,
-        file: PyFile,
+        file: com.intellij.psi.PsiFile,
     ): Target {
         val currentHash = FileContentHasher.hash(file)
         val status = if (currentHash == request.originalHash) ReplacementStatus.MATCH else ReplacementStatus.CHANGED

@@ -10,7 +10,7 @@ class RepositoryReviewPromptTest {
         val skills = AppSettings.defaultPromptSkills()
         val review = skills.first { it.id == RepositoryReviewPrompt.ID }
 
-        assertEquals(3, skills.indexOf(review))
+        assertEquals(4, skills.indexOf(review))
         assertTrue(review.prompt.length > 3_000)
         assertTrue(review.prompt.contains("Reuse audit"))
         assertTrue(review.prompt.contains("Duplication and size"))
@@ -40,7 +40,7 @@ class RepositoryReviewPromptTest {
 
         settings.loadState(state)
 
-        assertEquals(3, settings.state.promptSkills.indexOfFirst { it.id == RepositoryReviewPrompt.ID })
-        assertEquals("custom review instructions", settings.state.promptSkills[3].prompt)
+        assertEquals(4, settings.state.promptSkills.indexOfFirst { it.id == RepositoryReviewPrompt.ID })
+        assertEquals("custom review instructions", settings.state.promptSkills[4].prompt)
     }
 }

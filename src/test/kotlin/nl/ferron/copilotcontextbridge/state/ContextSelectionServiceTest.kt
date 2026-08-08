@@ -23,6 +23,59 @@ class ContextSelectionServiceTest : BasePlatformTestCase() {
         assertEquals(listOf("src/main.py"), service.currentSessionBatches().first { it.sessionId == "archive-batch" }.paths)
     }
 
+    fun testRestoringHistoricalExternalBatchUsesSourceKeyInsteadOfCurrentProjectPath() {
+        val externalRoot = Files.createTempDirectory("ccb-historical-external-")
+        try {
+            val externalFile = externalRoot.resolve("src/service.py")
+            Files.createDirectories(externalFile.parent)
+            Files.writeString(externalFile, "def service():\n    return True\n")
+            val source =
+                ExternalRepositoryDropResolver.Source(
+                    ExternalRepositoryDropResolver.Repository("api", "api", externalRoot, false),
+                    "src/service.py",
+                    externalFile,
+                    ExternalRepositoryDropResolver.Kind.PINNED_FILE,
+                )
+            val registry = project.getService(ExternalRepositorySelectionRegistry::class.java)
+            project.getService(ContextSelectionService::class.java).clear()
+            registry.clear()
+            registry.registerConfirmed(listOf(source))
+            val sourceKey = registry.registeredSourceKeys().single()
+            val selection = project.getService(ContextSelectionService::class.java)
+            selection.markExported("external-batch", "General change", listOf("src/service.py"), false, listOf(sourceKey))
+            registry.clear()
+
+            val restored = selection.restoreBatch("external-batch")
+
+            assertEquals(listOf(sourceKey), restored.restoredExternalSourceKeys)
+            assertEmpty(restored.unresolvedExternalSourceKeys)
+            assertEquals(listOf(sourceKey), registry.registeredSourceKeys().toList())
+            // The external path must not be interpreted as a current-project pin.
+            assertEmpty(selection.pinnedPaths())
+        } finally {
+            Files.walk(externalRoot).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        }
+    }
+
+    fun testMissingHistoricalExternalSourceIsReportedAndNeverPinnedLocally() {
+        val selection = project.getService(ContextSelectionService::class.java)
+        selection.clear()
+        project.getService(ExternalRepositorySelectionRegistry::class.java).clear()
+        selection.markExported(
+            "missing-external-batch",
+            "General change",
+            listOf("src/foreign.py"),
+            false,
+            listOf("gone-repository::src/foreign.py"),
+        )
+
+        val restored = selection.restoreBatch("missing-external-batch")
+
+        assertEmpty(restored.restoredExternalSourceKeys)
+        assertEquals(listOf("gone-repository::src/foreign.py"), restored.unresolvedExternalSourceKeys)
+        assertEmpty(selection.pinnedPaths())
+    }
+
     fun testSettingsOnlyActionCanRequestImmediateRecalculation() {
         val service = project.getService(ContextSelectionService::class.java)
         var changes = 0

@@ -10,10 +10,14 @@ class DevelopmentPromptLibraryTest {
         val skills = AppSettings.defaultPromptSkills()
 
         assertEquals("general-change", skills[0].id)
-        assertEquals(DevelopmentPromptLibrary.FIX_ISSUE_ID, skills[1].id)
-        assertEquals("write-tests", skills[2].id)
-        assertEquals(RepositoryReviewPrompt.ID, skills[3].id)
-        assertEquals(listOf("General change", "Debug problem", "Generate tests", "Review code"), skills.take(4).map { it.name })
+        assertEquals(DevelopmentPromptLibrary.NEW_CODE_ID, skills[1].id)
+        assertEquals(DevelopmentPromptLibrary.FIX_ISSUE_ID, skills[2].id)
+        assertEquals("write-tests", skills[3].id)
+        assertEquals(RepositoryReviewPrompt.ID, skills[4].id)
+        assertEquals(
+            listOf("General change", "New reusable Python code", "Debug problem", "Generate tests", "Review code"),
+            skills.take(5).map { it.name },
+        )
     }
 
     @Test
@@ -52,9 +56,10 @@ class DevelopmentPromptLibraryTest {
             .prompt = "customized"
         settings.loadState(settings.state)
 
-        assertEquals(DevelopmentPromptLibrary.FIX_ISSUE_ID, settings.state.promptSkills[1].id)
-        assertEquals("write-tests", settings.state.promptSkills[2].id)
-        assertEquals(RepositoryReviewPrompt.ID, settings.state.promptSkills[3].id)
+        assertEquals(DevelopmentPromptLibrary.NEW_CODE_ID, settings.state.promptSkills[1].id)
+        assertEquals(DevelopmentPromptLibrary.FIX_ISSUE_ID, settings.state.promptSkills[2].id)
+        assertEquals("write-tests", settings.state.promptSkills[3].id)
+        assertEquals(RepositoryReviewPrompt.ID, settings.state.promptSkills[4].id)
         assertEquals(
             "customized",
             settings.state.promptSkills

@@ -126,6 +126,57 @@ class ContextMarkdownRendererTest : BasePlatformTestCase() {
         assertFalse(markdown.contains("Mandatory ZIP rule"))
     }
 
+    fun testDuplicateExternalPathsKeepRepositoryQualifiedDependencyEdges() {
+        val relation =
+            DependencyRelation(
+                "src/config.py",
+                "src/client.py",
+                RelationType.DIRECT_IMPORT,
+                RelationConfidence.CONFIRMED,
+                fromRepositoryId = "repo-b",
+                toRepositoryId = "repo-b",
+            )
+        val selection =
+            RankedSelection(
+                listOf(
+                    candidate("src/config.py", true, 1000, emptyList()).copy(repositoryId = "repo-a", repositoryName = "repo-a"),
+                    candidate("src/config.py", false, 700, listOf(relation)).copy(repositoryId = "repo-b", repositoryName = "repo-b"),
+                    candidate("src/client.py", false, 800, listOf(relation)).copy(repositoryId = "repo-b", repositoryName = "repo-b"),
+                ),
+                emptyList(),
+                emptyList(),
+                emptyList(),
+            )
+
+        val markdown =
+            ContextMarkdownRenderer.render(
+                ContextMarkdownRenderer.Input(
+                    "repo-a",
+                    "session",
+                    selection,
+                    "repo-a/",
+                    listOf(relation),
+                    emptyMap(),
+                    mapOf(
+                        "repo-a::src/config.py" to "repo-a__src__config.py",
+                        "repo-b::src/config.py" to "repo-b__src__config.py",
+                        "repo-b::src/client.py" to "repo-b__src__client.py",
+                    ),
+                    "guidelines",
+                    emptyList(),
+                    "General",
+                    "Prompt",
+                    3,
+                    emptyList(),
+                    true,
+                ),
+            )
+
+        assertTrue(markdown.contains("repo-b: src/config.py"))
+        assertTrue(markdown.contains("src/client.py"))
+        assertTrue(markdown.contains("repo-b__src__config.py"))
+    }
+
     private fun candidate(
         path: String,
         pinned: Boolean,

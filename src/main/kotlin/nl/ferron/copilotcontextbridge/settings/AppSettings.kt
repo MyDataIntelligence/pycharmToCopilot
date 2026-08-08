@@ -149,6 +149,8 @@ ${Defaults.PYTHON_AUTHORING_RULES}""",
 ${Defaults.PYTHON_AUTHORING_RULES}""",
                     ),
                 )
+                // Keep the primary workflow order aligned with the Batch UI: General, New code, Fix, Tests.
+                add(DevelopmentPromptLibrary.skills().first { it.id == DevelopmentPromptLibrary.NEW_CODE_ID })
                 add(DevelopmentPromptLibrary.skills().first { it.id == DevelopmentPromptLibrary.FIX_ISSUE_ID })
                 add(
                     PromptSkillState(
@@ -167,7 +169,6 @@ ${Defaults.PYTHON_AUTHORING_RULES}""",
 
                 // Existing secondary Code workflows remain available after the four primary entries.
                 add(RefactorPrompt.skill())
-                add(DevelopmentPromptLibrary.skills().first { it.id == DevelopmentPromptLibrary.NEW_CODE_ID })
                 add(
                     PromptSkillState(
                         "create-documentation",

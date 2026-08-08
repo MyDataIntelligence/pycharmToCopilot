@@ -8,8 +8,9 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.fileTypes.FileType
+import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
-import com.jetbrains.python.PythonFileType
 
 /** Keeps version-sensitive JetBrains Diff API usage isolated from the import UI. */
 interface DiffFacade {
@@ -36,12 +37,13 @@ class JetBrainsDiffFacade(
         val factory = DiffContentFactory.getInstance()
         val current = combinedContent(replacements, useProposed = false)
         val proposed = combinedContent(replacements, useProposed = true)
+        val plainText = FileTypeManager.getInstance().getFileTypeByFileName("combined.txt")
         DiffManager.getInstance().showDiff(
             project,
             SimpleDiffRequest(
                 "Copilot changes (${replacements.size})",
-                factory.create(project, current, PythonFileType.INSTANCE),
-                factory.create(project, proposed, PythonFileType.INSTANCE),
+                factory.create(project, current, plainText),
+                factory.create(project, proposed, plainText),
                 "CURRENT",
                 "COPILOT PROPOSED",
             ),
@@ -58,13 +60,14 @@ class JetBrainsDiffFacade(
         // explicit include/use-Copilot action is chosen.
         val proposedDocument = EditorFactory.getInstance().createDocument(replacement.newText)
         val title = "${replacement.request.path} :: ${replacement.request.qualifiedName}"
+        val fileType = fileTypeFor(replacement.request.path)
         val request =
             if (replacement.status == ReplacementStatus.CHANGED && replacement.baseText.isNotBlank()) {
                 SimpleDiffRequest(
                     title,
-                    contentFactory.create(project, replacement.baseText, PythonFileType.INSTANCE),
-                    contentFactory.create(project, replacement.oldText, PythonFileType.INSTANCE),
-                    contentFactory.create(project, proposedDocument, PythonFileType.INSTANCE),
+                    contentFactory.create(project, replacement.baseText, fileType),
+                    contentFactory.create(project, replacement.oldText, fileType),
+                    contentFactory.create(project, proposedDocument, fileType),
                     "BASE (exported)",
                     "CURRENT (local)",
                     "PROPOSED (Copilot)",
@@ -72,8 +75,8 @@ class JetBrainsDiffFacade(
             } else {
                 SimpleDiffRequest(
                     title,
-                    contentFactory.create(project, replacement.oldText, PythonFileType.INSTANCE),
-                    contentFactory.create(project, proposedDocument, PythonFileType.INSTANCE),
+                    contentFactory.create(project, replacement.oldText, fileType),
+                    contentFactory.create(project, proposedDocument, fileType),
                     if (replacement.status == ReplacementStatus.NEW) "CURRENT (does not exist)" else "CURRENT",
                     "COPILOT PROPOSED",
                 )
@@ -107,6 +110,8 @@ class JetBrainsDiffFacade(
         object : AnAction(text) {
             override fun actionPerformed(event: AnActionEvent) = action()
         }
+
+    private fun fileTypeFor(path: String): FileType = FileTypeManager.getInstance().getFileTypeByFileName(path.substringAfterLast('/'))
 
     private fun combinedContent(
         replacements: List<ValidatedReplacement>,

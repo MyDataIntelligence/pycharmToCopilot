@@ -3,9 +3,13 @@ package nl.ferron.copilotcontextbridge.external
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import nl.ferron.copilotcontextbridge.model.ContextCandidate
+import nl.ferron.copilotcontextbridge.security.PathSafety
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
 import nl.ferron.copilotcontextbridge.state.ContextSelectionService
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -24,6 +28,11 @@ class ExternalRepositorySelectionRegistry(
         val pinnedFiles: List<ExternalRepositoryDropResolver.Source>,
         val discoveryDirectories: List<ExternalRepositoryDropResolver.Source>,
         val archiveFiles: List<ExternalRepositoryDropResolver.Source> = emptyList(),
+    )
+
+    data class RestoreResult(
+        val restored: List<ExternalRepositoryDropResolver.Source>,
+        val unresolved: List<String>,
     )
 
     private val sources = linkedMapOf<String, ExternalRepositoryDropResolver.Source>()
@@ -87,6 +96,7 @@ class ExternalRepositorySelectionRegistry(
                 )
             val canonical = source.copy(repository = repository)
             sources[canonical.key] = canonical
+            remember(canonical)
         }
         fireChanged()
     }
@@ -193,12 +203,132 @@ class ExternalRepositorySelectionRegistry(
 
     fun allSources(): List<ExternalRepositoryDropResolver.Source> = sources.values.toList()
 
+    /**
+     * Restores historical external selections by their persisted source keys.  The caller must
+     * pass source keys from BatchState; raw paths from that batch are intentionally ignored.  A
+     * source is reconstructed only when its remembered repository root still exists and the
+     * normalized relative path remains inside that root.  This keeps a path belonging to an
+     * external repository from being accidentally pinned into the current project.
+     */
+    fun restoreSourceKeys(sourceKeys: Collection<String>): RestoreResult {
+        val restored = mutableListOf<ExternalRepositoryDropResolver.Source>()
+        val unresolved = mutableListOf<String>()
+        sourceKeys
+            .filter { it.contains("::") }
+            .distinct()
+            .forEach { key ->
+                val existing = sources[key]
+                if (existing != null) {
+                    restored += existing
+                    return@forEach
+                }
+                val remembered = rememberedLocations().firstOrNull { it.sourceKey == key }
+                val source = remembered?.let(::restoreLocation)
+                if (source == null) {
+                    unresolved += key
+                } else {
+                    sources[source.key] = source
+                    restored += source
+                }
+            }
+        if (restored.isNotEmpty()) fireChanged()
+        return RestoreResult(restored, unresolved)
+    }
+
+    /** Keys known from staged history, including sources that are not currently registered. */
+    fun rememberedSourceKeys(): Set<String> = rememberedLocations().mapTo(linkedSetOf()) { it.sourceKey }
+
+    /**
+     * Retains an analyzed external candidate as a restorable source.  Discovery-directory files
+     * are not themselves registry entries, so staging calls this for every included external
+     * candidate before writing its historical BatchState record.
+     */
+    fun rememberCandidate(candidate: ContextCandidate) {
+        val root = candidate.repositoryRoot ?: return
+        if (candidate.repositoryId.isBlank()) return
+        runCatching {
+            val safeRoot =
+                root
+                    .toAbsolutePath()
+                    .normalize()
+                    .toRealPath(LinkOption.NOFOLLOW_LINKS)
+            val safePath = PathSafety.resolveInside(safeRoot, candidate.relativePath)
+            require(Files.isRegularFile(safePath, LinkOption.NOFOLLOW_LINKS))
+            remember(
+                ExternalRepositoryDropResolver.Source(
+                    ExternalRepositoryDropResolver.Repository(
+                        candidate.repositoryId,
+                        candidate.repositoryName.ifBlank { candidate.repositoryId },
+                        safeRoot,
+                        false,
+                    ),
+                    PathSafety.normalizeRelative(candidate.relativePath),
+                    safePath,
+                    ExternalRepositoryDropResolver.Kind.PINNED_FILE,
+                ),
+            )
+        }
+    }
+
     fun addListener(listener: () -> Unit) {
         listeners += listener
     }
 
     private fun persistentAlwaysExcluded(): MutableList<String> =
         project?.getService(ProjectSettings::class.java)?.state?.externalAlwaysExcludedSourceKeys ?: mutableListOf()
+
+    private fun rememberedLocations(): MutableList<ProjectSettings.ExternalSourceLocation> =
+        project?.getService(ProjectSettings::class.java)?.state?.externalSourceLocations ?: fallbackLocations
+
+    private fun remember(source: ExternalRepositoryDropResolver.Source) {
+        val locations = rememberedLocations()
+        locations.removeIf { it.sourceKey == source.key }
+        locations +=
+            ProjectSettings.ExternalSourceLocation().apply {
+                sourceKey = source.key
+                repositoryId = source.repository.id
+                repositoryName = source.repository.name
+                repositoryRoot =
+                    source.repository.root
+                        .toAbsolutePath()
+                        .normalize()
+                        .toString()
+                relativePath = source.relativePath
+                kind = source.kind.name
+            }
+    }
+
+    private fun restoreLocation(location: ProjectSettings.ExternalSourceLocation): ExternalRepositoryDropResolver.Source? =
+        runCatching {
+            require(location.sourceKey == "${location.repositoryId}::${location.relativePath}") {
+                "Remembered source key does not match its repository identity."
+            }
+            val root =
+                Path
+                    .of(location.repositoryRoot)
+                    .toAbsolutePath()
+                    .normalize()
+                    .toRealPath(LinkOption.NOFOLLOW_LINKS)
+            val relative = PathSafety.normalizeRelative(location.relativePath)
+            val path = PathSafety.resolveInside(root, relative)
+            require(!Files.isSymbolicLink(path)) { "Remembered source is a symbolic link." }
+            val kind = ExternalRepositoryDropResolver.Kind.valueOf(location.kind)
+            require(
+                if (kind == ExternalRepositoryDropResolver.Kind.DISCOVERY_DIRECTORY) {
+                    Files.isDirectory(path)
+                } else {
+                    Files.isRegularFile(path)
+                },
+            ) {
+                "Remembered external source no longer exists."
+            }
+            ExternalRepositoryDropResolver.Source(
+                ExternalRepositoryDropResolver.Repository(location.repositoryId, location.repositoryName, root, false),
+                relative,
+                path,
+                kind,
+            )
+        }.getOrNull()
 
     private fun repositoryIdsByRoot(): MutableMap<String, String> =
         project?.getService(ProjectSettings::class.java)?.state?.externalRepositoryIdsByRoot ?: fallbackRepositoryIds
@@ -252,6 +382,7 @@ class ExternalRepositorySelectionRegistry(
     }
 
     private val fallbackSessionExcluded = linkedSetOf<String>()
+    private val fallbackLocations = mutableListOf<ProjectSettings.ExternalSourceLocation>()
 
     private companion object {
         const val DEFAULT_SESSION = "__default__"

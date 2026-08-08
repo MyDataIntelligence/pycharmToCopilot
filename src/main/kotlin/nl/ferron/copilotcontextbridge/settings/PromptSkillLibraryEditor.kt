@@ -2,6 +2,23 @@ package nl.ferron.copilotcontextbridge.settings
 
 /** Deterministic Prompt Library mutations kept outside Swing for reliable testing. */
 object PromptSkillLibraryEditor {
+    /**
+     * Imports custom entries while preserving the complete built-in library and its primary order.
+     * Imported built-ins replace their defaults, so a full export still round-trips edits.
+     */
+    fun mergeImported(imported: Collection<AppSettings.PromptSkillState>): MutableList<AppSettings.PromptSkillState> {
+        val importedById = imported.associateBy { it.id }
+        val builtIns = AppSettings.defaultPromptSkills()
+        val merged =
+            builtIns.map { builtIn -> importedById[builtIn.id] ?: builtIn }.toMutableList()
+        val builtInIds = builtIns.mapTo(hashSetOf()) { it.id }
+        imported
+            .asSequence()
+            .filter { it.id !in builtInIds && merged.none { existing -> existing.id == it.id } }
+            .forEach(merged::add)
+        return merged
+    }
+
     fun isBuiltIn(skill: AppSettings.PromptSkillState): Boolean =
         AppSettings.defaultPromptSkills().any { builtIn -> builtIn.id == skill.id }
 

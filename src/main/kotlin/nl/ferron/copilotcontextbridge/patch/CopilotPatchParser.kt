@@ -86,7 +86,11 @@ class CopilotPatchParser {
                 require(path == suppliedPath.replace('\\', '/')) {
                     "Replacement $index path must already be canonical: $suppliedPath"
                 }
-                require(path.endsWith(".py", ignoreCase = true)) { "Replacement $index target must be a Python file." }
+                if (operation.endsWith("_function")) {
+                    require(path.endsWith(".py", ignoreCase = true)) {
+                        "Replacement $index function target must be a Python file."
+                    }
+                }
                 require(path.length <= MAX_PATH_LENGTH) { "Replacement $index path is too long." }
                 val embedded = item.optionalString("replacement")
                 val reference = item.optionalString("replacementFile")

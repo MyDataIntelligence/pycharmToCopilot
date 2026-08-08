@@ -36,7 +36,7 @@ This checklist records gates, not current results. Leave a box unchecked until c
 - [ ] Repository/session/path/symlink/schema/size/hash checks fail closed.
 - [ ] Function replace/add supports top-level, method, async, decorated and unambiguous nested targets.
 - [ ] `add_file` creates only a new syntactically valid Python file in an existing project directory.
-- [ ] `delete_file` requires an existing Python file and exported content hash.
+- [ ] `delete_file` requires an existing project file (Python or supported text file) and exported content hash.
 - [ ] Native per-operation, combined and three-way conflict diffs show correct content/identity.
 - [ ] Selection, Keep current, Use Copilot and Force Replace require explicit choices.
 - [ ] Apply revalidates immediately before write, changes only selected operations, preserves unrelated code/encoding and supports Undo.
