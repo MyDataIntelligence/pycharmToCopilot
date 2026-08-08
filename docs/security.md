@@ -12,6 +12,8 @@ The Context Policy may collect many repository files, but only a bounded physica
 
 All repository paths are normalised and resolved against the real repository root. Absolute paths, `..` traversal, different-drive paths and symlink escapes fail closed. The staging service creates a unique directory below the dedicated system-temp root, never renames or modifies originals, and copies current unsaved editor text where supported.
 
+Outbound ZIP discovery is read with compressed, expanded, per-entry and entry-count limits. Directory entries count toward the archive limit. Canonical archive-relative names are required; traversal, case-insensitive duplicates and Unix symlink/device metadata are rejected. Only valid UTF-8 text that passes ignore and secret scanning is cached, beneath a hash-addressed temporary root cleaned after the retention window. The top-level archive folders are preserved.
+
 The session manifest records repository ID, session/batch, plugin version, attachment/source mapping, hashes, function hashes, reasons, relations, policy and guideline sources. It is kept under `.session` and is not an upload attachment. Retention cleanup is constrained to direct session children, skips sessions marked keep, and defaults to seven days.
 
 Batch/session/permanent exclusions are distinct persisted decisions. **Include once** is a narrow current-batch override, not a secret-scanner bypass; suspicious content still requires confirmation.
@@ -19,6 +21,8 @@ Batch/session/permanent exclusions are distinct persisted decisions. **Include o
 ## Inbound patches
 
 JSON is accepted only when schema sniffing recognises a Copilot patch. ZIP entry names and expansion sizes have independent limits. Every operation revalidates repository-relative path, real path/symlink containment, project membership, target existence/non-existence, file type, repository/session identity and hashes.
+
+Inbound ZIP dispatch is deterministic: root `changes.json` selects strict structured parsing and can never fall back. Without it, plain code files use exact paths first; only one unique repository basename may be proposed when no exact path exists. Duplicate basename matches and multiple entries mapping to one target fail closed. Existing-file hashes are captured before review and checked again immediately before Apply.
 
 Function snippets are parsed with Python PSI and must contain exactly one complete function with a matching identity. `add_file` cannot overwrite an existing path. `delete_file` cannot proceed when its exported hash differs unless the UI provides and the user explicitly chooses the permitted conflict action. Overlapping operations are rejected.
 

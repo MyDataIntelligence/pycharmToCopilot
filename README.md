@@ -68,6 +68,8 @@ Pinned files have priority and remain separate by default. Automatic context can
 
 Candidates are ranked deterministically. Defaults include direct imports 800, dependents 700, tests 650, referenced configuration 550, package initializers 450, project configuration 400, second-level dependencies 300, package neighbours 200 and inferred relationships 100. Policy priorities affect resolver ordering; ties use dependency distance, confidence, smaller size, then alphabetical path. Included, omitted and excluded candidates retain their evidence and reason.
 
+`Add files` and the outbound drop zone also accept a ZIP as a discovery source. Safe UTF-8 text entries keep their full archive-relative paths and are labelled with the archive name. They are automatic candidates rather than pinned files, so loose explicitly selected files win and larger archives flow deterministically across later batches. Ignored, secret-like, binary, traversal, duplicate, symlink/special, oversized and excessive entries are excluded or rejected; archive content is materialized only in a retention-limited temporary cache.
+
 Exclusions can apply to the current batch, current conversation session, or permanently for the project. **Include once** overrides an exclusion for only the current batch. Starting a new session resets session-scoped history/exclusions while retaining project configuration.
 
 ## Return Instructions
@@ -78,7 +80,7 @@ For Microsoft 365 Copilot, the default code-return contract tells Copilot to use
 
 ## Import from Copilot
 
-The Import page accepts `.copilotpatch`, matching JSON, or ZIP by drop, file picker, or pasted JSON. Supported operations are:
+The Import page accepts `.copilotpatch`, matching JSON, or ZIP by drop, file picker, or pasted JSON. A ZIP with root `changes.json` always uses the strict structured format. A plain code ZIP is a controlled fallback: exact repository-relative paths are matched first, then a unique basename may be proposed; ambiguous basenames are rejected. Every proposed whole-file add/replace still requires diff review, selection, revalidation and Apply confirmation. Supported structured operations are:
 
 - `replace_function`: replace one complete top-level, method, async, decorated or unambiguous nested Python function;
 - `add_function`: insert one complete function at a validated module/parent/anchor;

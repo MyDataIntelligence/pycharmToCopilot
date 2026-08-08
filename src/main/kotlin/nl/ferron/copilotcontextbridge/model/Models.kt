@@ -132,4 +132,5 @@ data class BatchSummary(
     val promptSkillName: String,
     val paths: List<String>,
     val status: String = "PREPARED",
+    val sourceKeys: List<String> = paths,
 )

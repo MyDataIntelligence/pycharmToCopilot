@@ -18,6 +18,7 @@ class ExternalRepositorySelectionRegistry {
         val repository: ExternalRepositoryDropResolver.Repository,
         val pinnedFiles: List<ExternalRepositoryDropResolver.Source>,
         val discoveryDirectories: List<ExternalRepositoryDropResolver.Source>,
+        val archiveFiles: List<ExternalRepositoryDropResolver.Source> = emptyList(),
     )
 
     private val sources = linkedMapOf<String, ExternalRepositoryDropResolver.Source>()
@@ -60,6 +61,12 @@ class ExternalRepositorySelectionRegistry {
         fireChanged()
     }
 
+    /** Keeps archive discovery sources available so a following batch can select the next unsent entries. */
+    fun clearManualSourcesKeepArchives() {
+        val changed = sources.entries.removeIf { it.value.kind != ExternalRepositoryDropResolver.Kind.ARCHIVE_FILE }
+        if (changed) fireChanged()
+    }
+
     fun selections(): List<RepositorySelection> =
         sources.values
             .groupBy { it.repository.id }
@@ -69,11 +76,12 @@ class ExternalRepositorySelectionRegistry {
                     values.first().repository,
                     values.filter { it.kind == ExternalRepositoryDropResolver.Kind.PINNED_FILE }.sortedBy { it.relativePath },
                     values.filter { it.kind == ExternalRepositoryDropResolver.Kind.DISCOVERY_DIRECTORY }.sortedBy { it.relativePath },
+                    values.filter { it.kind == ExternalRepositoryDropResolver.Kind.ARCHIVE_FILE }.sortedBy { it.relativePath },
                 )
             }.sortedBy { it.repository.id }
 
     fun candidates(resolver: ExternalRepositoryDropResolver): List<ContextCandidate> =
-        selections().flatMap { selection -> selection.pinnedFiles.map(resolver::toCandidate) }
+        selections().flatMap { selection -> (selection.pinnedFiles + selection.archiveFiles).map(resolver::toCandidate) }
 
     fun registeredSourceKeys(): Set<String> = sources.keys.toSet()
 

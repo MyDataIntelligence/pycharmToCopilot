@@ -14,7 +14,7 @@ object ReturnInstructionDefaults {
 
     private val PATCH_FILE =
         """
-        Return one versioned Copilot Context Bridge change set as a real downloadable `copilot-result.copilotpatch` JSON file, created with the available code/file tool. If file creation is unavailable, return one fenced JSON block and explicitly state that this fallback was necessary.
+        Return one versioned Copilot Context Bridge change set as a real downloadable `copilot-result.copilotpatch` JSON file, created with the available code/file tool. If you package the result as ZIP instead, `changes.json` at the ZIP root is mandatory and must describe every included change; never use a loose source-only ZIP as the primary structured response. If file creation is unavailable, return one fenced JSON block and explicitly state that this fallback was necessary.
 
         Use schema version field `formatVersion` with value `1`. For every changed Python function include `operation`, the original repository-relative `path`, fully `qualifiedName`, exported `originalHash`, and `replacement` containing the complete function source including decorators, signature, type hints, docstring, and full body. Return only changed functions and put all replacements in the same change set. Never use line numbers or partial source as identity.
 
@@ -25,7 +25,7 @@ object ReturnInstructionDefaults {
 
     private val CODE_TOOL_FILES =
         """
-        Use the available code/file-creation tool to return real downloadable files, not ordinary chat-only code blocks. Preserve every original repository-relative path in a versioned `changes.json` manifest (`schemaVersion`: 1) and attach the complete source for each new or changed file. For changed Python functions, record the fully `qualifiedName` and exported `originalHash`; never return a partial function.
+        Use the available code/file-creation tool to return one real downloadable ZIP, not ordinary chat-only code blocks. A versioned `changes.json` manifest (`schemaVersion`: 1) at the ZIP root is mandatory. It must preserve every original repository-relative path and reference the complete source for each new or changed file. Do not return a loose source-only ZIP. For changed Python functions, record the fully `qualifiedName` and exported `originalHash`; never return a partial function.
 
         Include `CHANGE_SUMMARY.md` with: overview, changed paths, qualified functions, reasons, tests actually performed, risks, assumptions, and limitations. If the interface cannot create files, state that limitation and use clearly labelled full-source code blocks as a fallback.
         """.trimIndent()

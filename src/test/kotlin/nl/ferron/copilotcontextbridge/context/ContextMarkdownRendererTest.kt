@@ -59,6 +59,7 @@ class ContextMarkdownRendererTest : BasePlatformTestCase() {
         assertTrue(markdown.contains("tests/test_main.py"))
         assertTrue(markdown.contains("contents of omitted files were not supplied", ignoreCase = true))
         assertTrue(markdown.contains("Use the code tool and attach a real .copilotpatch file."))
+        assertTrue(markdown.contains("every returned ZIP must contain a versioned `changes.json`"))
         assertTrue(markdown.contains("\"summary\""))
         assertTrue(markdown.contains("```mermaid"))
         assertFalse(markdown.contains("C:\\Users"))
@@ -122,6 +123,7 @@ class ContextMarkdownRendererTest : BasePlatformTestCase() {
         assertFalse(markdown.contains("\"formatVersion\""))
         assertFalse(markdown.contains("add_function"))
         assertFalse(markdown.contains(".copilotpatch)"))
+        assertFalse(markdown.contains("Mandatory ZIP rule"))
     }
 
     private fun candidate(

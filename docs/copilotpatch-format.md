@@ -79,6 +79,8 @@ copilot-result.zip
 
 `replacementFile` paths are canonical archive-relative paths and must stay within `replacements/`. Limits are 20 MB compressed archive, 50 MB expanded, 10 MB per entry, 100 entries and 50 operations. Absolute paths, traversal, symlink-like escapes, duplicate entries and oversized expansion are rejected.
 
+`changes.json` at the ZIP root is mandatory for Copilot-generated ZIP output and always selects the strict structured importer. A source-only ZIP without that manifest is accepted only as a manual fallback: the plugin proposes exact repository-relative matches first, then a single unique basename match. Ambiguous names are rejected, all rows start unselected, and every add or whole-file replacement requires diff review and explicit Apply confirmation.
+
 ## Validation and preview states
 
 Function identity uses repository-relative path, qualified parent/function chain, function kind and exported hash—not line numbers. States are `MATCH`, `NEW`, `CHANGED`, `MISSING`, `AMBIGUOUS`, and `INVALID`.

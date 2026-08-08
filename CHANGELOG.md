@@ -9,6 +9,8 @@
 - Added branch-to-PR and repository-to-user-story prompts plus GitHub Copilot creator prompts.
 - Added native per-operation and three-way conflict diff flows.
 - Extended patch import with complete new-file and delete-file operations alongside function replacement/addition.
+- Added safe ZIP discovery for outbound batches: archive-relative paths are preserved, unsafe, binary and secret entries are filtered, and unsent archive entries flow across subsequent batches without displacing pinned files.
+- Added an inbound plain-code ZIP fallback with exact-path then unique-basename mapping, whole-file diffs, hash revalidation, explicit selection and Undo-safe add/replace operations. Structured ZIPs with root `changes.json` remain the required preferred Copilot output.
 - Added clone-to-install `install.ps1` workflow with atomic update and ZIP fallback.
 - Expanded automated and live PyCharm release test plans. Live results remain pending until executed.
 - Kept the More navigation in one stable scrollable row instead of letting Swing reorder wrapped tab rows.

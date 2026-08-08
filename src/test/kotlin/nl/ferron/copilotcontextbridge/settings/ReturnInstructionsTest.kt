@@ -13,6 +13,15 @@ class ReturnInstructionsTest : TestCase() {
         }
     }
 
+    fun testFileBasedReturnModesRequireStructuredZipManifest() {
+        val patch = ReturnInstructionDefaults.forMode(CopilotReturnMode.COPILOT_PATCH_FILE)
+        val files = ReturnInstructionDefaults.forMode(CopilotReturnMode.CODE_TOOL_FILES)
+
+        assertTrue(patch.contains("`changes.json` at the ZIP root is mandatory"))
+        assertTrue(files.contains("`changes.json` manifest"))
+        assertTrue(files.contains("Do not return a loose source-only ZIP"))
+    }
+
     fun testEffectiveHierarchyUsesProjectOverrideAndThenPromptAddition() {
         val app = AppSettings.Data()
         val project = ProjectSettings.Data()

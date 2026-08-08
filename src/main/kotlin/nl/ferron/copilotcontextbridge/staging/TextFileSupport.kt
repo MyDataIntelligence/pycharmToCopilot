@@ -16,14 +16,19 @@ object TextFileSupport {
         runCatching {
             Files.newInputStream(path).use { input ->
                 val bytes = input.readNBytes(16_384)
-                if (bytes.isEmpty()) return@use true
-                if (bytes.any { it == 0.toByte() }) return@use false
-                val controls =
-                    bytes.count { byte ->
-                        val value = byte.toInt() and 0xff
-                        value < 32 && value !in setOf(9, 10, 12, 13)
-                    }
-                controls.toDouble() / bytes.size <= 0.02
+                isLikelyText(bytes)
             }
         }.getOrDefault(false)
+
+    fun isLikelyText(bytes: ByteArray): Boolean {
+        val sample = if (bytes.size <= 16_384) bytes else bytes.copyOf(16_384)
+        if (sample.isEmpty()) return true
+        if (sample.any { it == 0.toByte() }) return false
+        val controls =
+            sample.count { byte ->
+                val value = byte.toInt() and 0xff
+                value < 32 && value !in setOf(9, 10, 12, 13)
+            }
+        return controls.toDouble() / sample.size <= 0.02
+    }
 }

@@ -15,6 +15,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
+import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.ui.JBUI
 import nl.ferron.copilotcontextbridge.ProjectRoot
 import nl.ferron.copilotcontextbridge.context.ContextPackService
@@ -276,7 +277,7 @@ class CopilotContextPanel(
             )
             add(
                 actionGrid(
-                    JButton("＋ Add files").apply { addActionListener { addFiles() } },
+                    JButton("＋ Add files, folder or ZIP").apply { addActionListener { addFiles() } },
                     JButton("Clear", AllIcons.Actions.GC).apply { addActionListener { clearSelection() } },
                 ),
             )
@@ -316,7 +317,7 @@ class CopilotContextPanel(
         }
 
     private fun createRepositoryDropZone() =
-        JLabel("Drop repository files or folders from Explorer", AllIcons.Actions.Download, SwingConstants.CENTER).apply {
+        JLabel("Drop repository files, folders or ZIP archives", AllIcons.Actions.Download, SwingConstants.CENTER).apply {
             border = BorderFactory.createDashedBorder(JBColor.GRAY, 1f, 3f)
             preferredSize = Dimension(JBUI.scale(320), JBUI.scale(34))
             minimumSize = Dimension(0, JBUI.scale(34))
@@ -621,7 +622,25 @@ class CopilotContextPanel(
 
     private fun addFiles() {
         val descriptor = FileChooserDescriptor(true, true, false, false, false, true)
-        selectionService.addSelection(FileChooser.chooseFiles(descriptor, project, null).toList())
+        val selected = FileChooser.chooseFiles(descriptor, project, null).toList()
+        val archives = selected.filter { !it.isDirectory && it.extension.equals("zip", ignoreCase = true) }
+        val regularSelection = selected - archives.toSet()
+        if (regularSelection.isNotEmpty()) selectionService.addSelection(regularSelection)
+        if (archives.isEmpty()) return
+        AppExecutorUtil.getAppExecutorService().execute {
+            runCatching { externalResolver.resolve(archives.map { Path.of(it.path) }) }
+                .onSuccess { result -> ApplicationManager.getApplication().invokeLater { acceptRepositoryDrop(result) } }
+                .onFailure { error ->
+                    ApplicationManager.getApplication().invokeLater {
+                        UiSupport.notify(
+                            project,
+                            "ZIP context import failed",
+                            error.message ?: "The selected ZIP could not be processed safely.",
+                            NotificationType.ERROR,
+                        )
+                    }
+                }
+        }
     }
 
     private fun skillLabel(skill: AppSettings.PromptSkillState): String = "${skill.category.ifBlank { "Custom" }}  ·  ${skill.name}"
@@ -939,9 +958,9 @@ class CopilotContextPanel(
 
     private fun startNextBatch() {
         invalidatePreparedBatch()
-        externalRegistry.clear()
+        externalRegistry.clearManualSourcesKeepArchives()
         selectionService.clear()
-        status.text = "Select files for the next batch; previous files remain visible in history."
+        status.text = "Next batch ready; archive sources remain available and previously sent entries are avoided."
         dragLabel.text = "Drag becomes available after preparation"
         recalculate()
     }

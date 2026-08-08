@@ -69,6 +69,7 @@ class PatchImportPanel(
             JPanel().apply {
                 layout = BoxLayout(this, BoxLayout.Y_AXIS)
                 add(stepTitle("1. Drop .copilotpatch / JSON / ZIP"))
+                add(JLabel("Structured changes.json is preferred; a plain code ZIP is reviewed as a safe fallback."))
                 add(createInputPanel())
                 add(Box.createVerticalStrut(JBUI.scale(9)))
                 add(stepTitle("2. Validation"))
@@ -84,7 +85,7 @@ class PatchImportPanel(
     private fun createInputPanel(): JPanel {
         val drop =
             JLabel(
-                "<html><center><b>Drop file here</b><br><font color='#888888'>or click to open</font></center></html>",
+                "<html><center><b>Drop Copilot result here</b><br><font color='#888888'>changes.json preferred · plain ZIP supported</font></center></html>",
                 AllIcons.Nodes.Folder,
                 SwingConstants.CENTER,
             ).apply {
@@ -245,7 +246,7 @@ class PatchImportPanel(
             result.targets
                 .firstOrNull()
                 ?.validated
-                ?.let { "Diff — ${it.request.path}::${it.request.qualifiedName}" }
+                ?.let(::diffTitleFor)
                 ?: "Function diff"
         applyButton.isEnabled = validSchema && selections.values.any { it.isSelected }
         updateApplyCaption()
@@ -257,18 +258,23 @@ class PatchImportPanel(
         val selectable = safe || item.status == ReplacementStatus.CHANGED
         val displayName =
             if (item.request.operation.endsWith("_file")) {
-                if (item.request.operation == "add_file") "Add file" else "Delete file"
+                when (item.request.operation) {
+                    "add_file" -> "Add file"
+                    "replace_file" -> "Replace file"
+                    "delete_file" -> "Delete file"
+                    else -> "File change"
+                }
             } else {
                 "${item.request.qualifiedName}()"
             }
         val selected =
-            JCheckBox(displayName, selectable).apply {
+            JCheckBox(displayName, item.selected && selectable).apply {
                 isEnabled = selectable
                 toolTipText = item.request.path
                 addActionListener {
                     diff.text = item.unifiedDiff
                     diff.caretPosition = 0
-                    diffTitle.text = "Diff — ${item.request.path}::${item.request.qualifiedName}"
+                    diffTitle.text = diffTitleFor(item)
                     updateApplyCaption()
                 }
             }
@@ -336,6 +342,13 @@ class PatchImportPanel(
             },
         )
     }
+
+    private fun diffTitleFor(item: nl.ferron.copilotcontextbridge.patch.ValidatedReplacement): String =
+        if (item.request.operation.endsWith("_file")) {
+            "Diff — ${item.request.path}"
+        } else {
+            "Diff — ${item.request.path}::${item.request.qualifiedName}"
+        }
 
     private fun selectAll() {
         selections.values.filter { it.isEnabled }.forEach { it.isSelected = true }
@@ -420,9 +433,10 @@ class PatchImportPanel(
                         result.targets
                             .first { "${it.validated.request.path}::${it.validated.request.qualifiedName}" == key }
                             .validated
-                    "WHAT: The local ${if (target.request.operation.endsWith("_file")) "file" else "function"} changed after export.\n" +
+                    val targetKind = if (target.request.operation.endsWith("_file")) "file" else "function"
+                    "WHAT: The local $targetKind changed after export.\n" +
                         "WHERE: $key\n" +
-                        "WHY: The Copilot proposal was generated against an older function hash.\n" +
+                        "WHY: The Copilot proposal was generated against an older $targetKind hash.\n" +
                         "EXPECTED: ${target.request.originalHash}\n" +
                         "CURRENT: ${if (target.request.operation.endsWith(
                                 "_file",

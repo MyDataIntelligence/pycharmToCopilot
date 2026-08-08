@@ -55,6 +55,7 @@ class PythonFunctionReplacementService(
                 val structurallyReady =
                     when (target.validated.request.operation) {
                         "add_file" -> target.fileOperationReady && target.file != null && target.fileParent != null
+                        "replace_file" -> target.fileOperationReady && target.file != null
                         "delete_file" -> target.fileOperationReady && target.file != null
                         else -> target.parsed != null && (target.function != null || target.insertionParent != null)
                     }
@@ -77,6 +78,8 @@ class PythonFunctionReplacementService(
                 val replaced =
                     if (operation == "add_file") {
                         createFile(target)
+                    } else if (operation == "replace_file") {
+                        replaceFile(target)
                     } else if (target.validated.status == ReplacementStatus.NEW) {
                         val container =
                             when (val parent = target.insertionParent) {
@@ -100,9 +103,12 @@ class PythonFunctionReplacementService(
                 // reformat(PyFunction) is called directly after a structural PSI replacement.
                 // Keep the safe, parsed PSI replacement instead of risking a rolled-back change.
                 // Older supported IDEs can still use the native formatter.
-                if (settings.reformatReplacements && ApplicationInfo.getInstance().build.baselineVersion < 262) {
+                if (!operation.endsWith("_file") &&
+                    settings.reformatReplacements &&
+                    ApplicationInfo.getInstance().build.baselineVersion < 262
+                ) {
                     CodeStyleManager.getInstance(project).reformat(replaced)
-                } else if (settings.reformatReplacements) {
+                } else if (!operation.endsWith("_file") && settings.reformatReplacements) {
                     logger.debug("Skipped unsafe PyFunction reformat on PyCharm 2026.2 or newer")
                 }
                 replaced.containingFile?.let(affectedFiles::add)
@@ -143,6 +149,16 @@ class PythonFunctionReplacementService(
         document.setText(target.validated.newText)
         PsiDocumentManager.getInstance(project).commitDocument(document)
         return created
+    }
+
+    private fun replaceFile(target: PatchValidator.Target): PsiFile {
+        val file = target.file ?: error("Target file no longer exists.")
+        val document =
+            PsiDocumentManager.getInstance(project).getDocument(file)
+                ?: error("Could not open an editable document for the target file.")
+        document.setText(target.validated.newText)
+        PsiDocumentManager.getInstance(project).commitDocument(document)
+        return file
     }
 
     private fun optimizeImports(files: Collection<PsiFile>) {

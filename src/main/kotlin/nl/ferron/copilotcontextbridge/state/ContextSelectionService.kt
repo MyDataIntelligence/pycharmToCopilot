@@ -26,6 +26,8 @@ class ContextSelectionService(
 
         @JvmField var paths: MutableList<String> = mutableListOf()
 
+        @JvmField var sourceKeys: MutableList<String> = mutableListOf()
+
         @JvmField var status: String = "PREPARED"
 
         @JvmField var conversationSessionId: String = ""
@@ -73,6 +75,7 @@ class ContextSelectionService(
         data.batches.forEachIndexed { index, batch ->
             if (batch.conversationSessionId.isBlank()) batch.conversationSessionId = data.activeConversationSessionId
             if (batch.batchNumber <= 0) batch.batchNumber = index + 1
+            if (batch.sourceKeys.isEmpty()) batch.sourceKeys.addAll(batch.paths)
         }
         validatePaths()
     }
@@ -217,15 +220,38 @@ class ContextSelectionService(
 
     fun allSentPaths(): Set<String> = data.batches.flatMapTo(linkedSetOf()) { it.paths }
 
+    fun sentSourceKeys(): Set<String> =
+        data.batches
+            .filter { it.conversationSessionId == data.activeConversationSessionId }
+            .flatMapTo(linkedSetOf()) { it.sourceKeys.ifEmpty { it.paths } }
+
+    fun allSentSourceKeys(): Set<String> = data.batches.flatMapTo(linkedSetOf()) { it.sourceKeys.ifEmpty { it.paths } }
+
     fun batches(): List<BatchSummary> =
         data.batches.map {
-            BatchSummary(it.sessionId, it.createdAt, it.promptSkillName, it.paths.toList(), it.status)
+            BatchSummary(
+                it.sessionId,
+                it.createdAt,
+                it.promptSkillName,
+                it.paths.toList(),
+                it.status,
+                it.sourceKeys.ifEmpty { it.paths }.toList(),
+            )
         }
 
     fun currentSessionBatches(): List<BatchSummary> =
         data.batches
             .filter { it.conversationSessionId == data.activeConversationSessionId }
-            .map { BatchSummary(it.sessionId, it.createdAt, it.promptSkillName, it.paths.toList(), it.status) }
+            .map {
+                BatchSummary(
+                    it.sessionId,
+                    it.createdAt,
+                    it.promptSkillName,
+                    it.paths.toList(),
+                    it.status,
+                    it.sourceKeys.ifEmpty { it.paths }.toList(),
+                )
+            }
 
     fun activeConversationSessionId(): String = data.activeConversationSessionId
 
@@ -234,6 +260,7 @@ class ContextSelectionService(
         promptSkillName: String,
         paths: List<String>,
         clearActive: Boolean,
+        sourceKeys: List<String> = paths,
     ) {
         val batch =
             BatchState().apply {
@@ -241,6 +268,7 @@ class ContextSelectionService(
                 createdAt = Instant.now().toString()
                 this.promptSkillName = promptSkillName
                 this.paths.addAll(paths.distinct())
+                this.sourceKeys.addAll(sourceKeys.distinct())
                 conversationSessionId = data.activeConversationSessionId
                 batchNumber = data.nextBatchNumber
             }

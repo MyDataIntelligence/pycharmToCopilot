@@ -43,6 +43,7 @@ object DependencyRanker {
 
     fun comparator(): Comparator<ContextCandidate> =
         compareByDescending<ContextCandidate> { it.pinned }
+            .thenBy { it.previouslySent }
             .thenByDescending { it.score }
             .thenBy { it.depth }
             .thenBy { confidenceOrder(it.confidence) }

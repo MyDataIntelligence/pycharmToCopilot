@@ -139,6 +139,7 @@ class StagingService(
             skill.name,
             pack.selection.included.map { it.relativePath },
             false,
+            pack.selection.included.map { it.sourceKey },
         )
         return StagingResult(directory, staged, manifest)
     }

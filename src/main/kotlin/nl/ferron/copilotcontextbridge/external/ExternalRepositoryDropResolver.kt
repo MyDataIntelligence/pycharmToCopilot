@@ -24,7 +24,7 @@ class ExternalRepositoryDropResolver(
     currentRepositoryRoot: Path,
     private val globalIgnorePatterns: Collection<String>,
     private val customIgnorePatterns: Collection<String> = emptyList(),
-    secretFilenamePatterns: Collection<String>,
+    private val secretFilenamePatterns: Collection<String>,
     private val textualScanLimitBytes: Long = 2L * 1024 * 1024,
 ) {
     data class Repository(
@@ -44,7 +44,7 @@ class ExternalRepositoryDropResolver(
         val key: String get() = "${repository.id}::$relativePath"
     }
 
-    enum class Kind { PINNED_FILE, DISCOVERY_DIRECTORY }
+    enum class Kind { PINNED_FILE, DISCOVERY_DIRECTORY, ARCHIVE_FILE }
 
     data class Rejected(
         val suppliedPath: Path,
@@ -78,8 +78,13 @@ class ExternalRepositoryDropResolver(
                     .lowercase()
             }.forEach { supplied ->
                 resolveOne(supplied).fold(
-                    onSuccess = raw::add,
-                    onFailure = { rejected += Rejected(supplied, it.message ?: "The dropped path is not safe.") },
+                    onSuccess = { resolved ->
+                        raw += resolved.sources
+                        rejected += resolved.rejected
+                    },
+                    onFailure = {
+                        rejected += Rejected(supplied, it.message ?: "The dropped path is not safe.")
+                    },
                 )
             }
 
@@ -116,12 +121,13 @@ class ExternalRepositoryDropResolver(
     }
 
     fun toCandidate(source: Source): ContextCandidate {
-        require(source.kind == Kind.PINNED_FILE) { "Discovery directories are not upload candidates." }
+        require(source.kind != Kind.DISCOVERY_DIRECTORY) { "Discovery directories are not upload candidates." }
         val size = Files.size(source.absolutePath)
+        val archive = source.kind == Kind.ARCHIVE_FILE
         return ContextCandidate(
             relativePath = source.relativePath,
             absolutePath = source.absolutePath,
-            score = 1_000,
+            score = if (archive) 250 else 1_000,
             depth = 0,
             confidence = RelationConfidence.CONFIRMED,
             relations =
@@ -132,10 +138,15 @@ class ExternalRepositoryDropResolver(
                         RelationType.PINNED,
                         RelationConfidence.CONFIRMED,
                         depth = 0,
-                        evidence = "manually dropped from the operating-system file manager",
+                        evidence =
+                            if (archive) {
+                                "discovered from archive ${source.repository.name} at ${source.relativePath}"
+                            } else {
+                                "manually dropped from the operating-system file manager"
+                            },
                     ),
                 ),
-            pinned = true,
+            pinned = !archive,
             secretWarning = source.secretWarning,
             size = size,
             sha256 = sha256(source.absolutePath),
@@ -145,7 +156,7 @@ class ExternalRepositoryDropResolver(
         )
     }
 
-    private fun resolveOne(supplied: Path): kotlin.Result<RawSource> =
+    private fun resolveOne(supplied: Path): kotlin.Result<ResolvedSource> =
         runCatching {
             val absolute = supplied.toAbsolutePath().normalize()
             require(Files.exists(absolute, LinkOption.NOFOLLOW_LINKS)) { "Dropped path does not exist." }
@@ -155,17 +166,32 @@ class ExternalRepositoryDropResolver(
             require(
                 isDirectory || Files.isRegularFile(real, LinkOption.NOFOLLOW_LINKS),
             ) { "Only regular files and directories are accepted." }
+            if (!isDirectory && real.fileName.toString().endsWith(".zip", ignoreCase = true)) {
+                val archive =
+                    ZipContextSourceExtractor(
+                        globalIgnorePatterns,
+                        customIgnorePatterns,
+                        secretFilenamePatterns = secretFilenamePatterns,
+                        maximumEntryBytes = textualScanLimitBytes.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                    ).extract(real)
+                val sources =
+                    archive.entries.map { entry ->
+                        RawSource(archive.extractionRoot, entry.archivePath, entry.extractedPath, Kind.ARCHIVE_FILE, null)
+                    }
+                val exclusions = archive.excluded.map { excluded -> Rejected(supplied, "${excluded.archivePath}: ${excluded.reason}") }
+                return@runCatching ResolvedSource(sources, exclusions)
+            }
             val repositoryRoot = findRepositoryRoot(real, isDirectory)
             val relative = repositoryRoot.relativize(real).joinToString("/") { it.toString() }
             require(!relative.split('/').contains("..")) { "Dropped path escapes its repository root." }
             val matcher = ignoreMatcher(repositoryRoot)
             require(!matcher.isIgnored(relative, isDirectory)) { "Path is excluded by repository or plugin ignore rules." }
             if (isDirectory) {
-                RawSource(repositoryRoot, relative, real, Kind.DISCOVERY_DIRECTORY, null)
+                ResolvedSource(listOf(RawSource(repositoryRoot, relative, real, Kind.DISCOVERY_DIRECTORY, null)))
             } else {
                 require(TextFileSupport.isLikelyText(real)) { "Only text-based repository files can be added to Copilot context." }
                 val warning = inspectSecret(real, relative)
-                RawSource(repositoryRoot, relative, real, Kind.PINNED_FILE, warning)
+                ResolvedSource(listOf(RawSource(repositoryRoot, relative, real, Kind.PINNED_FILE, warning)))
             }
         }
 
@@ -274,5 +300,10 @@ class ExternalRepositoryDropResolver(
         val absolutePath: Path,
         val kind: Kind,
         val secretWarning: String?,
+    )
+
+    private data class ResolvedSource(
+        val sources: List<RawSource>,
+        val rejected: List<Rejected> = emptyList(),
     )
 }

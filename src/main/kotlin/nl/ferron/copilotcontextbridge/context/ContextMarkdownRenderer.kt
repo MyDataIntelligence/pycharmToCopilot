@@ -197,6 +197,13 @@ object ContextMarkdownRenderer {
             appendLine()
             appendLine(returnHeading(input.returnMode))
             appendLine()
+            if (input.returnMode in setOf(CopilotReturnMode.COPILOT_PATCH_FILE, CopilotReturnMode.CODE_TOOL_FILES)) {
+                appendLine(
+                    "Mandatory ZIP rule: every returned ZIP must contain a versioned `changes.json` at its root. " +
+                        "A loose source-only ZIP is only an import fallback and is never the requested primary format.",
+                )
+                appendLine()
+            }
             appendLine(input.returnInstructions)
             if (input.returnMode == CopilotReturnMode.COPILOT_PATCH_FILE) appendPatchExample(input, this)
         }
@@ -231,7 +238,7 @@ object ContextMarkdownRenderer {
             "For a new function use `operation: add_function`, omit `originalHash`, provide `parentQualifiedName` (empty for module level), and optionally provide `insertAfterQualifiedName`. Never use add_function when a function with that qualified name already exists.",
         )
         target.appendLine(
-            "If returning ZIP, put `changes.json` at the root, snippets under `replacements/`, and also create `CHANGE_SUMMARY.md` using the same Overview / Functions / Tests / Risks / Limitations headings.",
+            "If returning ZIP, `changes.json` at the root is mandatory. Put snippets under `replacements/` and also create `CHANGE_SUMMARY.md` using the same Overview / Functions / Tests / Risks / Limitations headings. Never return a loose source-only ZIP as the primary result.",
         )
     }
 

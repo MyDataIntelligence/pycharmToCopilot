@@ -35,7 +35,7 @@ class PatchValidator(
         val parsed: PyFunction?,
         val insertionParent: PsiElement? = null,
         val insertionAnchor: PsiElement? = null,
-        val file: PyFile? = null,
+        val file: com.intellij.psi.PsiFile? = null,
         val fileParent: PsiDirectory? = null,
         val fileOperationReady: Boolean = false,
     )
@@ -64,6 +64,10 @@ class PatchValidator(
         ) {
             warnings += "Patch has no structured change summary. Code validation continues, but the requested summary is missing."
         }
+        if (patch.sessionId.startsWith("generic-zip-")) {
+            warnings +=
+                "Plain code ZIP fallback: verify every exact/basename path mapping. A structured ZIP with root changes.json is preferred."
+        }
         validateSession(patch, errors, warnings)
         val exportedBaseTexts = loadExportedBaseTexts(patch, warnings)
         val targets =
@@ -71,18 +75,23 @@ class PatchValidator(
                 val preliminary =
                     runCatching {
                         val relative = PathSafety.normalizeRelative(request.path)
-                        require(relative.endsWith(".py", true)) { "Target must be a Python file." }
                         when (request.operation) {
                             "add_file" -> validateFileAddition(request, root, rootVf, relative)
+                            "replace_file" -> {
+                                val file = resolveProjectPsiFile(root, rootVf, relative)
+                                validateFileReplacement(request, file)
+                            }
                             "delete_file" -> {
                                 val file = testFileResolver?.invoke(relative) ?: resolveProjectFile(checkNotNull(root), rootVf, relative)
                                 validateFileDeletion(request, file)
                             }
                             "add_function" -> {
+                                require(relative.endsWith(".py", true)) { "Function target must be a Python file." }
                                 val file = testFileResolver?.invoke(relative) ?: resolveProjectFile(checkNotNull(root), rootVf, relative)
                                 validateAddition(request, file)
                             }
                             else -> {
+                                require(relative.endsWith(".py", true)) { "Function target must be a Python file." }
                                 val file = testFileResolver?.invoke(relative) ?: resolveProjectFile(checkNotNull(root), rootVf, relative)
                                 val matches = PythonFunctionLocator.find(file, request.qualifiedName)
                                 when {
@@ -205,10 +214,7 @@ class PatchValidator(
             PsiManager.getInstance(project).findDirectory(parentVf)
                 ?: error("Target parent is not a PSI directory.")
         val text = request.replacement ?: error("New file content is missing.")
-        val parsed =
-            PsiFileFactory
-                .getInstance(project)
-                .createFileFromText(relative.substringAfterLast('/'), PythonFileType.INSTANCE, text) as PyFile
+        val parsed = PsiFileFactory.getInstance(project).createFileFromText(relative.substringAfterLast('/'), text)
         val syntaxError = PsiTreeUtil.findChildOfType(parsed, PsiErrorElement::class.java)
         if (syntaxError != null) {
             return Target(
@@ -228,6 +234,45 @@ class PatchValidator(
                 unifiedDiff = UnifiedDiff.create(relative, "", text),
             )
         return Target(validated, null, null, file = parsed, fileParent = parentDirectory, fileOperationReady = true)
+    }
+
+    private fun validateFileReplacement(
+        request: FunctionReplacement,
+        file: com.intellij.psi.PsiFile,
+    ): Target {
+        val text = request.replacement ?: error("Replacement file content is missing.")
+        val parsed = PsiFileFactory.getInstance(project).createFileFromText(request.path.substringAfterLast('/'), text)
+        val syntaxError = PsiTreeUtil.findChildOfType(parsed, PsiErrorElement::class.java)
+        if (syntaxError != null && request.path.endsWith(".py", true)) {
+            return Target(
+                invalid(request, ReplacementStatus.INVALID, "Replacement Python file has invalid syntax: ${syntaxError.errorDescription}"),
+                null,
+                null,
+                file = file,
+                fileOperationReady = true,
+            )
+        }
+        val currentHash = FileContentHasher.hash(file)
+        val status = if (currentHash == request.originalHash) ReplacementStatus.MATCH else ReplacementStatus.CHANGED
+        val archivePath = request.replacementFile?.removePrefix("archive:")
+        val mapping = if (archivePath != null && archivePath != request.path) " (mapped from $archivePath)" else ""
+        val validated =
+            ValidatedReplacement(
+                request,
+                status,
+                if (status == ReplacementStatus.MATCH) {
+                    "Existing file matches its import-time hash$mapping."
+                } else {
+                    "The file changed after ZIP review began; explicit force is required$mapping."
+                },
+                file.text,
+                text,
+                file.text.lines().size,
+                text.lines().size,
+                UnifiedDiff.create(request.path, file.text, text),
+                selected = status == ReplacementStatus.MATCH && !request.replacementFile.orEmpty().startsWith("archive:"),
+            )
+        return Target(validated, null, null, file = file, fileOperationReady = true)
     }
 
     private fun validateFileDeletion(
@@ -267,6 +312,17 @@ class PatchValidator(
         }
         return PsiManager.getInstance(project).findFile(vf) as? PyFile
             ?: error("Target is not parsed as Python.")
+    }
+
+    private fun resolveProjectPsiFile(
+        root: Path?,
+        rootVf: com.intellij.openapi.vfs.VirtualFile,
+        relative: String,
+    ): com.intellij.psi.PsiFile {
+        root?.let { PathSafety.resolveInside(it, relative) }
+        val vf = rootVf.findFileByRelativePath(relative) ?: error("Target is not a project file.")
+        require(ProjectFileIndex.getInstance(project).isInContent(vf)) { "Target is outside project content roots." }
+        return PsiManager.getInstance(project).findFile(vf) ?: error("Target is not parsed as a project file.")
     }
 
     private fun validateFunction(

@@ -6,6 +6,21 @@ import nl.ferron.copilotcontextbridge.ProjectRoot
 import java.nio.file.Files
 
 class ContextSelectionServiceTest : BasePlatformTestCase() {
+    fun testArchiveSourceKeysRemainDistinctAcrossBatches() {
+        val service = project.getService(ContextSelectionService::class.java)
+        service.markExported(
+            "archive-batch",
+            "General change",
+            listOf("src/main.py"),
+            false,
+            listOf("first-archive::src/main.py"),
+        )
+
+        assertTrue("first-archive::src/main.py" in service.sentSourceKeys())
+        assertFalse("second-archive::src/main.py" in service.sentSourceKeys())
+        assertEquals(listOf("src/main.py"), service.currentSessionBatches().first { it.sessionId == "archive-batch" }.paths)
+    }
+
     fun testSettingsOnlyActionCanRequestImmediateRecalculation() {
         val service = project.getService(ContextSelectionService::class.java)
         var changes = 0

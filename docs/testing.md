@@ -25,6 +25,8 @@ Automated coverage must include:
 - ignored/secret paths, traversal, symlink containment, scan limits and staged text extension conversion;
 - repository tree, guidelines precedence, Return Instruction inheritance and required-clause validation;
 - deterministic function/file hashes and staging manifest/base-function data;
+- outbound ZIP discovery path preservation, ignore/secret/binary filtering, traversal/duplicate/bomb limits and multi-batch source-key history;
+- inbound structured-ZIP detection plus exact-path, unique-basename, ambiguous-basename and explicit whole-file replacement behavior;
 - patch JSON/ZIP/sniffing/schema limits and invalid schema;
 - PSI location for top-level/method/async/decorated/nested functions;
 - complete function replacement/insertion while preserving neighbours;

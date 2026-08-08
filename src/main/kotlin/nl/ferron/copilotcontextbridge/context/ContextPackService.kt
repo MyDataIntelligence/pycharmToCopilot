@@ -73,6 +73,10 @@ class ContextPackService(
                 .selections()
                 .flatMap { externalSelection ->
                     val pinned = externalSelection.pinnedFiles.map(externalResolver::toCandidate)
+                    val archive =
+                        externalSelection.archiveFiles.map(externalResolver::toCandidate).map { candidate ->
+                            candidate.copy(previouslySent = candidate.sourceKey in selectionService.sentSourceKeys())
+                        }
                     val discovered =
                         externalSelection.discoveryDirectories.flatMap { directory ->
                             val discovery = externalResolver.discoverFiles(directory, policy.maxRepositoryFiles.coerceIn(1, 500))
@@ -94,7 +98,7 @@ class ContextPackService(
                                 )
                             }
                         }
-                    pinned + discovered
+                    pinned + archive + discovered
                 }.distinctBy { it.sourceKey }
         val allCandidates = analysis.candidates + externalCandidates
         val effectiveCandidates =
