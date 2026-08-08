@@ -15,8 +15,8 @@ Rules:
 
 | ID | Scenario | Expected result | Status | Full-window screenshot |
 |---|---|---|---|---|
-| L001 | Install from a fresh clone with `install.ps1` | Build/install completes atomically and exactly one plugin instance loads | PENDING | `docs/screenshots/live-audit/L001-fresh-clone-install.png` |
-| L002 | Repeat `install.ps1` update | Previous plugin is backed up outside plugin directory; updated plugin loads once | PENDING | `docs/screenshots/live-audit/L002-repeat-install-update.png` |
+| L001 | Install from a fresh clone with `install.ps1` | Build/install completes atomically and exactly one plugin instance loads | PASS | `docs/screenshots/live-audit/L205-clean-installer-startup.png` |
+| L002 | Repeat `install.ps1` update | Previous plugin is backed up outside plugin directory; updated plugin loads once | PASS | `docs/screenshots/live-audit/L204-final-reinstall-startup.png` |
 | L003 | Manual ZIP install fallback | Built ZIP is accepted by Install Plugin from Disk | PENDING | `docs/screenshots/live-audit/L003-manual-zip-install.png` |
 | L004 | Open fixture project | Tool window opens on compact three-step Batch page and fits at normal width | PASS | `docs/screenshots/live-audit/L174-reinstalled-final.png` |
 | L005 | Resize tool window narrow/wide | Primary controls remain readable; scrolling appears instead of clipping | PASS | `docs/screenshots/live-audit/L005-responsive-layout.png` |
@@ -91,7 +91,7 @@ Rules:
 
 | ID | Scenario | Expected result | Status | Full-window screenshot |
 |---|---|---|---|---|
-| L057 | Prepare simple batch | `00_REPO_CONTEXT.md` plus pinned copies are staged safely | PENDING | `docs/screenshots/live-audit/L057-prepare-simple-batch.png` |
+| L057 | Prepare simple batch | `00_REPO_CONTEXT.md` plus pinned copies are staged safely | PASS | `docs/screenshots/live-audit/L187-prepared-prompt-clean.png` |
 | L058 | 20 physical attachments | Count reaches exactly 20 and never 21 | PENDING | `docs/screenshots/live-audit/L058-twenty-physical-attachments.png` |
 | L059 | More than 20 repository files via bundles | Repository count exceeds attachment count; physical count stays ≤20 | PENDING | `docs/screenshots/live-audit/L059-bundled-repository-files.png` |
 | L060 | Too many pinned separate files | Clear validation error; no invalid staging directory is produced | PENDING | `docs/screenshots/live-audit/L060-pinned-overflow.png` |
@@ -101,8 +101,8 @@ Rules:
 | L064 | Unsaved editor document | Staged content and hash reflect current editor text | PENDING | `docs/screenshots/live-audit/L064-unsaved-document.png` |
 | L065 | Preview top-level tab | Exact context text and Included/Omitted/Excluded file views remain readable | PASS | `docs/screenshots/live-audit/L151-preview-tab.png`, `L212-preview-wrapped-context-files.png` |
 | L066 | Copy context only | Clipboard contains generated Markdown without source-body concatenation | PENDING | `docs/screenshots/live-audit/L066-copy-context-only.png` |
-| L067 | Copy as text | Clipboard contains metadata, original paths and explicit full file boundaries | PENDING | `docs/screenshots/live-audit/L067-copy-combined-text.png` |
-| L068 | Copy files | Clipboard exposes exact staged OS file list | PENDING | `docs/screenshots/live-audit/L068-copy-file-list.png` |
+| L067 | Copy as text | Clipboard contains metadata, original paths and explicit full file boundaries | PASS | `docs/screenshots/live-audit/L203-copy-text-success.png` |
+| L068 | Copy files | Clipboard exposes exact staged OS file list | PASS | `docs/screenshots/live-audit/L188-after-copy-files-attempt.png`, `docs/screenshots/live-audit/L189-copy-file-buttons.png` |
 | L069 | Drag handle | Copy-only OS file-list drag contains context plus final staged attachments | PENDING | `docs/screenshots/live-audit/L069-drag-file-list.png` |
 | L070 | Open staging folder | Explorer opens exact unique temp session directory | PENDING | `docs/screenshots/live-audit/L070-open-staging-folder.png` |
 | L071 | Keep staged session | Keep marker is visible and cleanup skips session | PENDING | `docs/screenshots/live-audit/L071-keep-session.png` |
