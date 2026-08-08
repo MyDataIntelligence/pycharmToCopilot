@@ -198,10 +198,31 @@ class PromptSkillsPanel(
                 .state.promptSkills
                 .getOrNull(list.selectedIndex) ?: return
         val selectedIndex = list.selectedIndex
-        if (ContextPolicyDialog(skill.id, skill.name, skill.contextPolicy).showAndGet()) {
+        if (
+            ContextPolicyDialog(skill.id, skill.name, skill.contextPolicy) { duplicatedPolicy ->
+                duplicateSkillWithPolicy(selectedIndex, duplicatedPolicy)
+            }.showAndGet()
+        ) {
             refresh(selectedIndex)
             onLibraryChanged()
         }
+    }
+
+    private fun duplicateSkillWithPolicy(
+        sourceIndex: Int,
+        policy: nl.ferron.copilotcontextbridge.settings.ContextPolicyState,
+    ) {
+        val skills = AppSettings.getInstance().state.promptSkills
+        if (sourceIndex !in skills.indices) return
+        val duplicate =
+            PromptSkillLibraryEditor.duplicate(
+                skills,
+                sourceIndex,
+                "custom-${UUID.randomUUID().toString().take(8)}",
+            )
+        duplicate.contextPolicy = policy.copyOf()
+        refresh(skills.indexOf(duplicate))
+        onLibraryChanged()
     }
 
     private fun exportSkills() {

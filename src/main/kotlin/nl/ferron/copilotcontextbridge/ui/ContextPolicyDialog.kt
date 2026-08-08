@@ -28,6 +28,7 @@ class ContextPolicyDialog(
     private val promptId: String,
     private val promptName: String,
     private val policy: ContextPolicyState,
+    private val onDuplicatePolicy: (ContextPolicyState) -> Unit = {},
 ) : DialogWrapper(true) {
     private val workingPolicy = policy.copyOf()
     private val model = RuleTableModel(workingPolicy.rules)
@@ -104,6 +105,12 @@ class ContextPolicyDialog(
                         JPanel(FlowLayout(FlowLayout.RIGHT, 6, 0)).apply {
                             add(JButton("Configure rule…").apply { addActionListener { configureSelected() } })
                             add(JButton("Duplicate rule").apply { addActionListener { duplicateSelected() } })
+                            add(
+                                JButton("Duplicate policy").apply {
+                                    toolTipText = "Create a new prompt skill with this policy as an independent copy"
+                                    addActionListener { onDuplicatePolicy(workingPolicy.copyOf()) }
+                                },
+                            )
                             add(JButton("Reset").apply { addActionListener { resetPolicy() } })
                         },
                         BorderLayout.EAST,
