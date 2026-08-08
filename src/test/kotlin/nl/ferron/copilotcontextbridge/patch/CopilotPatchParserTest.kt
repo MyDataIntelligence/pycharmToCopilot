@@ -17,7 +17,11 @@ class CopilotPatchParserTest {
     }
 
     @Test fun `parses add function without original hash`() {
-        val json = validJson().replace("\"replace_function\"", "\"add_function\"").replace(",\"originalHash\":\"sha256:abc\"", "")
+        val json =
+            validJson()
+                .replace("\"replace_function\"", "\"add_function\"")
+                .replace(",\"originalHash\":\"$VALID_HASH\"", "")
+                .replace("\"replacement\":", "\"parentQualifiedName\":\"\",\"replacement\":")
         assertEquals(
             null,
             CopilotPatchParser()
@@ -41,25 +45,25 @@ class CopilotPatchParserTest {
 
     @Test fun `parses delete file with exact hash and no replacement`() {
         val json =
-            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"delete_file","path":"src/old.py","originalHash":"sha256:abc"}]}"""
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"delete_file","path":"src/old.py","originalHash":"$VALID_HASH"}]}"""
 
         val replacement = CopilotPatchParser().parseJson(json).replacements.single()
 
         assertEquals(FILE_OPERATION_QUALIFIED_NAME, replacement.qualifiedName)
-        assertEquals("sha256:abc", replacement.originalHash)
+        assertEquals(VALID_HASH, replacement.originalHash)
         assertEquals(null, replacement.replacement)
     }
 
     @Test fun `rejects delete file with replacement content`() {
         val json =
-            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"delete_file","path":"src/old.py","originalHash":"sha256:abc","replacement":"bad"}]}"""
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"delete_file","path":"src/old.py","originalHash":"$VALID_HASH","replacement":"bad"}]}"""
 
         assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseJson(json) }
     }
 
-    @Test fun `zip resolves add file content outside replacements directory`() {
+    @Test fun `zip resolves add file content from replacements directory`() {
         val changes =
-            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"add_file","path":"src/new.py","replacementFile":"files/new.py"}]}"""
+            """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","replacements":[{"operation":"add_file","path":"src/new.py","replacementFile":"replacements/new.py"}]}"""
         val bytes =
             ByteArrayOutputStream()
                 .also { output ->
@@ -67,7 +71,7 @@ class CopilotPatchParserTest {
                         zip.putNextEntry(ZipEntry("changes.json"))
                         zip.write(changes.toByteArray())
                         zip.closeEntry()
-                        zip.putNextEntry(ZipEntry("files/new.py"))
+                        zip.putNextEntry(ZipEntry("replacements/new.py"))
                         zip.write("VALUE = 2\n".toByteArray())
                     }
                 }.toByteArray()
@@ -117,6 +121,63 @@ class CopilotPatchParserTest {
         )
     }
 
+    @Test fun `rejects invalid hash duplicate target and noncanonical path`() {
+        val invalidHash = validJson().replace(VALID_HASH, "sha256:abc")
+        val duplicate =
+            validJson().replace(
+                "]}",
+                ",{" +
+                    "\"operation\":\"replace_function\",\"path\":\"src/a.py\",\"qualifiedName\":\"run\"," +
+                    "\"originalHash\":\"$VALID_HASH\",\"replacement\":\"def run():\\n    return 2\\n\"}]}",
+            )
+        val noncanonical = validJson().replace("src/a.py", "src/./a.py")
+
+        assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseJson(invalidHash) }
+        assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseJson(duplicate) }
+        assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseJson(noncanonical) }
+    }
+
+    @Test fun `rejects duplicate ZIP entries and snippet outside replacements directory`() {
+        val outside = validJson().replace("\"replacement\":\"def run():\\n    return 1\\n\"", "\"replacementFile\":\"files/run.py\"")
+        val outsideBytes = zipOf("changes.json" to outside, "files/run.py" to "def run():\n    return 2\n")
+        assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseZip(outsideBytes) }
+
+        val changes = validJson().replace("\"replacement\":\"def run():\\n    return 1\\n\"", "\"replacementFile\":\"replacements/run.py\"")
+        val duplicateBytes =
+            zipOf(
+                "changes.json" to changes,
+                "replacements/run.py" to "def run():\n    return 1\n",
+                "replacements/./run.py" to "def run():\n    return 2\n",
+            )
+        assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseZip(duplicateBytes) }
+    }
+
+    @Test fun `rejects known schema fields with wrong JSON types or incomplete summary`() {
+        val fractionalVersion = validJson().replace("\"formatVersion\":1", "\"formatVersion\":1.5")
+        val stringBoolean = validJson().replace("\"replacement\":", "\"allowAsyncChange\":\"true\",\"replacement\":")
+        val incompleteSummary = validJson().replace(",\"testsPerformed\":[\"Not run\"]", "")
+
+        assertThrows(IllegalStateException::class.java) { CopilotPatchParser().parseJson(fractionalVersion) }
+        assertThrows(IllegalArgumentException::class.java) { CopilotPatchParser().parseJson(stringBoolean) }
+        assertThrows(IllegalStateException::class.java) { CopilotPatchParser().parseJson(incompleteSummary) }
+    }
+
+    private fun zipOf(vararg entries: Pair<String, String>): ByteArray =
+        ByteArrayOutputStream()
+            .also { output ->
+                ZipOutputStream(output).use { zip ->
+                    entries.forEach { (name, content) ->
+                        zip.putNextEntry(ZipEntry(name))
+                        zip.write(content.toByteArray())
+                        zip.closeEntry()
+                    }
+                }
+            }.toByteArray()
+
     private fun validJson() =
-        """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","summary":{"overview":"Updated behavior","functions":[],"testsPerformed":["Not run"],"risks":[],"limitations":[]},"replacements":[{"operation":"replace_function","path":"src/a.py","qualifiedName":"run","originalHash":"sha256:abc","replacement":"def run():\n    return 1\n"}]}"""
+        """{"formatVersion":1,"repositoryId":"repo","sessionId":"session","summary":{"overview":"Updated behavior","functions":[],"testsPerformed":["Not run"],"risks":[],"limitations":[]},"replacements":[{"operation":"replace_function","path":"src/a.py","qualifiedName":"run","originalHash":"$VALID_HASH","replacement":"def run():\n    return 1\n"}]}"""
+
+    companion object {
+        private const val VALID_HASH = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
 }

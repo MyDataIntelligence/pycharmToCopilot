@@ -36,6 +36,7 @@ class ContextPackService(
     fun build(): ContextPack {
         val settings = project.getService(ProjectSettings::class.java).state
         val selectionService = project.getService(ContextSelectionService::class.java)
+        selectionService.validatePaths()
         val app = AppSettings.getInstance()
         val skill = app.skill(settings.selectedPromptSkillId)
         val policy = skill.contextPolicy
@@ -156,13 +157,19 @@ class ContextPackService(
                     )
                 }
             }
+        val invalidPinnedErrors =
+            selectionService.invalidPinnedPaths().map {
+                "Pinned path no longer exists: $it. Remove it from the pinned selection or add the moved file again."
+            }
+        val analysisWarnings = analysis.warnings.filterNot { it.startsWith("Pinned path no longer exists:") }
         val finalSelection =
             ranked.copy(
                 included = ranked.included.filter { it.sourceKey in representedPaths },
                 omitted = (ranked.omitted + packingOmitted).distinctBy { it.sourceKey },
-                validationErrors = ranked.validationErrors + attachmentErrors,
+                validationErrors = ranked.validationErrors + attachmentErrors + invalidPinnedErrors,
                 warnings =
                     ranked.warnings +
+                        analysisWarnings +
                         if (packingOmitted.isEmpty()) {
                             emptyList()
                         } else {

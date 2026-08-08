@@ -28,20 +28,21 @@ class ContextPolicyDialog(
     private val promptName: String,
     private val policy: ContextPolicyState,
 ) : DialogWrapper(true) {
-    private val model = RuleTableModel(policy.rules)
+    private val workingPolicy = policy.copyOf()
+    private val model = RuleTableModel(workingPolicy.rules)
     private val table = JTable(model)
     private val target = JComboBox(CopilotTarget.entries.map { it.name }.toTypedArray())
     private val returnMode = JComboBox(CopilotReturnMode.entries.map { it.name }.toTypedArray())
     private val previous = JComboBox(PreviousBatchMode.entries.map { it.name }.toTypedArray())
-    private val repositoryFiles = JSpinner(SpinnerNumberModel(policy.maxRepositoryFiles.coerceIn(1, 500), 1, 500, 1))
-    private val attachmentLimit = JSpinner(SpinnerNumberModel(policy.maxAttachments.coerceIn(2, 20), 2, 20, 1))
-    private val bundle = JBCheckBox("Bundle automatic context", policy.bundleAutomaticContext)
+    private val repositoryFiles = JSpinner(SpinnerNumberModel(workingPolicy.maxRepositoryFiles.coerceIn(1, 500), 1, 500, 1))
+    private val attachmentLimit = JSpinner(SpinnerNumberModel(workingPolicy.maxAttachments.coerceIn(2, 20), 2, 20, 1))
+    private val bundle = JBCheckBox("Bundle automatic context", workingPolicy.bundleAutomaticContext)
 
     init {
         title = "Context Policy · $promptName"
-        target.selectedItem = policy.target
-        returnMode.selectedItem = policy.returnMode
-        previous.selectedItem = policy.previousBatchMode
+        target.selectedItem = workingPolicy.target
+        returnMode.selectedItem = workingPolicy.returnMode
+        previous.selectedItem = workingPolicy.previousBatchMode
         table.autoCreateRowSorter = true
         table.fillsViewportHeight = true
         init()
@@ -88,13 +89,14 @@ class ContextPolicyDialog(
         }
 
     override fun doOKAction() {
-        policy.target = target.selectedItem as String
-        policy.returnMode = returnMode.selectedItem as String
-        policy.previousBatchMode = previous.selectedItem as String
-        policy.maxRepositoryFiles = repositoryFiles.value as Int
-        policy.maxAttachments = attachmentLimit.value as Int
-        policy.bundleAutomaticContext = bundle.isSelected
-        policy.rules = model.rules.map(ContextRuleState::copyOf).toMutableList()
+        workingPolicy.target = target.selectedItem as String
+        workingPolicy.returnMode = returnMode.selectedItem as String
+        workingPolicy.previousBatchMode = previous.selectedItem as String
+        workingPolicy.maxRepositoryFiles = repositoryFiles.value as Int
+        workingPolicy.maxAttachments = attachmentLimit.value as Int
+        workingPolicy.bundleAutomaticContext = bundle.isSelected
+        workingPolicy.rules = model.rules.map(ContextRuleState::copyOf).toMutableList()
+        ContextPolicyEditor.replaceWith(policy, workingPolicy)
         super.doOKAction()
     }
 
@@ -135,14 +137,14 @@ class ContextPolicyDialog(
     }
 
     private fun resetPolicy() {
-        ContextPolicyEditor.resetToPromptDefault(policy, promptId)
-        target.selectedItem = policy.target
-        returnMode.selectedItem = policy.returnMode
-        previous.selectedItem = policy.previousBatchMode
-        repositoryFiles.value = policy.maxRepositoryFiles
-        attachmentLimit.value = policy.maxAttachments
-        bundle.isSelected = policy.bundleAutomaticContext
-        model.rules = policy.rules.map(ContextRuleState::copyOf).toMutableList()
+        ContextPolicyEditor.resetToPromptDefault(workingPolicy, promptId)
+        target.selectedItem = workingPolicy.target
+        returnMode.selectedItem = workingPolicy.returnMode
+        previous.selectedItem = workingPolicy.previousBatchMode
+        repositoryFiles.value = workingPolicy.maxRepositoryFiles
+        attachmentLimit.value = workingPolicy.maxAttachments
+        bundle.isSelected = workingPolicy.bundleAutomaticContext
+        model.rules = workingPolicy.rules.map(ContextRuleState::copyOf).toMutableList()
         model.fireTableDataChanged()
     }
 
@@ -159,12 +161,10 @@ class ContextPolicyDialog(
         override fun getColumnName(column: Int) = columns[column]
 
         override fun getColumnClass(columnIndex: Int): Class<*> =
-            if (columnIndex in
-                setOf(0, 4, 8)
-            ) {
-                Boolean::class.java
-            } else {
-                String::class.java
+            when (columnIndex) {
+                0, 4, 8 -> Boolean::class.java
+                3, 5, 6 -> Int::class.java
+                else -> String::class.java
             }
 
         override fun isCellEditable(
@@ -181,10 +181,10 @@ class ContextPolicyDialog(
                 0 -> rule.enabled
                 1 -> rule.id
                 2 -> rule.resolver
-                3 -> rule.priority.toString()
+                3 -> rule.priority
                 4 -> rule.required
-                5 -> rule.maxDepth.toString()
-                6 -> rule.maxFiles.toString()
+                5 -> rule.maxDepth
+                6 -> rule.maxFiles
                 7 -> rule.bundleGroup
                 else -> rule.keepSeparate
             }

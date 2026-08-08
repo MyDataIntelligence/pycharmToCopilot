@@ -19,7 +19,6 @@ import nl.ferron.copilotcontextbridge.model.sourceKey
 import nl.ferron.copilotcontextbridge.patch.PythonFunctionLocator
 import nl.ferron.copilotcontextbridge.security.PathSafety
 import nl.ferron.copilotcontextbridge.settings.AppSettings
-import nl.ferron.copilotcontextbridge.settings.ProjectSettings
 import nl.ferron.copilotcontextbridge.state.ContextSelectionService
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -134,13 +133,12 @@ class StagingService(
             )
         val manifest = metadata.resolve("context-session.json")
         Files.writeString(manifest, GsonBuilder().setPrettyPrinting().create().toJson(manifestData), StandardCharsets.UTF_8)
-        val settings = project.getService(ProjectSettings::class.java).state
         val skill = AppSettings.getInstance().skill(pack.promptSkillId)
         project.getService(ContextSelectionService::class.java).markExported(
             pack.sessionId,
             skill.name,
             pack.selection.included.map { it.relativePath },
-            settings.clearActiveSelectionAfterExport,
+            false,
         )
         return StagingResult(directory, staged, manifest)
     }

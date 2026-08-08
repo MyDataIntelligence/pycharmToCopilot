@@ -1,6 +1,5 @@
 package nl.ferron.copilotcontextbridge.patch
 
-import com.google.gson.JsonParser
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -25,11 +24,8 @@ object CopilotPatchSniffer {
 
     fun matchesJson(text: String): Boolean =
         runCatching {
-            val root = JsonParser.parseString(text).asJsonObject
-            root.get("formatVersion")?.asInt == 1 &&
-                root.get("repositoryId")?.asString?.isNotBlank() == true &&
-                root.get("sessionId")?.asString?.isNotBlank() == true &&
-                root.getAsJsonArray("replacements")?.size()?.let { it in 1..CopilotPatchParser.MAX_REPLACEMENTS } == true
+            CopilotPatchParser().parseJson(text)
+            true
         }.getOrDefault(false)
 
     private fun matchesZip(path: Path): Boolean {

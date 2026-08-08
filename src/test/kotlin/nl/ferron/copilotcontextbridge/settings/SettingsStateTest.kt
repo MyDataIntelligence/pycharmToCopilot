@@ -12,6 +12,7 @@ class SettingsStateTest : TestCase() {
                 scores.clear()
                 enabledGuidelineSources.clear()
                 guidelineSelectionConfigured = true
+                clearActiveSelectionAfterExport = true
             }
 
         service.loadState(state)
@@ -21,6 +22,7 @@ class SettingsStateTest : TestCase() {
         assertEquals(ProjectSettings.defaultScores(), service.state.scores)
         assertTrue(service.state.guidelineSelectionConfigured)
         assertTrue(service.state.enabledGuidelineSources.isEmpty())
+        assertFalse(service.state.clearActiveSelectionAfterExport)
     }
 
     fun testApplicationSettingsRepairEmptyPatternsAndRetention() {

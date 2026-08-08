@@ -2,6 +2,19 @@ package nl.ferron.copilotcontextbridge.settings
 
 /** Deterministic Prompt Library mutations kept outside Swing for reliable testing. */
 object PromptSkillLibraryEditor {
+    fun isBuiltIn(skill: AppSettings.PromptSkillState): Boolean =
+        AppSettings.defaultPromptSkills().any { builtIn -> builtIn.id == skill.id }
+
+    fun selectionAfterRefresh(
+        previousIndex: Int,
+        size: Int,
+    ): Int = if (size == 0) -1 else previousIndex.coerceIn(0, size - 1)
+
+    fun selectionAfterRemoval(
+        removedIndex: Int,
+        newSize: Int,
+    ): Int = if (newSize == 0) -1 else removedIndex.coerceAtMost(newSize - 1).coerceAtLeast(0)
+
     fun add(
         skills: MutableList<AppSettings.PromptSkillState>,
         id: String,
@@ -47,6 +60,7 @@ object PromptSkillLibraryEditor {
         index: Int,
     ): Boolean {
         if (skills.size <= 1 || index !in skills.indices) return false
+        if (isBuiltIn(skills[index])) return false
         skills.removeAt(index)
         return true
     }

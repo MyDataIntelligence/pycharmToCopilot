@@ -15,3 +15,6 @@
 - Fixed independent caller, callee, nearby-test, depth and per-resolver file-limit handling in Context Policies.
 - Hardened Prompt Library editing/import validation and restored prompt-specific policy defaults correctly.
 - Allowed `install.ps1 -BuildOnly` while PyCharm is open; live installation still requires PyCharm to be closed.
+- Added explicit repository-guideline editing and saving, invalid-pin recovery, synchronized batch-history details and guarded history deletion.
+- Hardened patch import against duplicate targets, unsafe ZIP aliases, stale hashes and mixed file/function conflicts; expanded real Undo and multi-file coverage.
+- Stabilized Prompt Library refreshes, duplicate-name selection, built-in prompt protection and transactional Context Policy cancellation.

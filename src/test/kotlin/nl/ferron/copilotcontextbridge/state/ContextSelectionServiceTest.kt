@@ -1,8 +1,21 @@
 package nl.ferron.copilotcontextbridge.state
 
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import nl.ferron.copilotcontextbridge.ProjectRoot
+import java.nio.file.Files
 
 class ContextSelectionServiceTest : BasePlatformTestCase() {
+    fun testSettingsOnlyActionCanRequestImmediateRecalculation() {
+        val service = project.getService(ContextSelectionService::class.java)
+        var changes = 0
+        service.addListener { changes++ }
+
+        service.requestRecalculation()
+
+        assertEquals(1, changes)
+    }
+
     fun testAutomaticExclusionsAreBatchScopedAndClearable() {
         val service = project.getService(ContextSelectionService::class.java)
 
@@ -25,6 +38,29 @@ class ContextSelectionServiceTest : BasePlatformTestCase() {
         assertEmpty(service.pinnedPaths())
         assertEmpty(service.discoveryRoots())
         assertEmpty(service.excludedAutomaticPaths())
+    }
+
+    fun testMultiSelectionAcrossFilesAndDirectoryPublishesOneChange() {
+        val root = ProjectRoot.path(project)
+        val firstPath = root.resolve("src/first.py")
+        val secondPath = root.resolve("tests/test_first.py")
+        Files.createDirectories(firstPath.parent)
+        Files.createDirectories(secondPath.parent)
+        Files.writeString(firstPath, "FIRST = 1\n")
+        Files.writeString(secondPath, "def test_first(): pass\n")
+        val first = requireNotNull(LocalFileSystem.getInstance().refreshAndFindFileByNioFile(firstPath))
+        val second = requireNotNull(LocalFileSystem.getInstance().refreshAndFindFileByNioFile(secondPath))
+        val directory = first.parent
+        val service = project.getService(ContextSelectionService::class.java)
+        service.loadState(ContextSelectionService.Data())
+        var notifications = 0
+        service.addListener { notifications++ }
+
+        service.addSelection(listOf(first, second, directory))
+
+        assertEquals(listOf("src/first.py", "tests/test_first.py"), service.pinnedPaths())
+        assertEquals(listOf("src"), service.discoveryRoots())
+        assertEquals(1, notifications)
     }
 
     fun testPreparedBatchIsMarkedHandedOffAfterSendAction() {

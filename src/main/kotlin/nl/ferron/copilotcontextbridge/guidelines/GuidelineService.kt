@@ -1,7 +1,12 @@
 package nl.ferron.copilotcontextbridge.guidelines
 
+import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
 import nl.ferron.copilotcontextbridge.ProjectRoot
+import nl.ferron.copilotcontextbridge.security.PathSafety
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.ContextPolicyState
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
@@ -107,11 +112,48 @@ class GuidelineService(
         return Merged(markdown, sources)
     }
 
+    fun sourceText(relativePath: String): String {
+        require(detect().any { it.relativePath == relativePath }) {
+            "Not a detected repository guideline source: $relativePath"
+        }
+        val path = PathSafety.resolveInside(ProjectRoot.path(project), relativePath)
+        return readRaw(path)
+    }
+
+    /** Writes only an already detected guideline source, and only after the UI's explicit Save action. */
+    fun saveSource(
+        relativePath: String,
+        content: String,
+    ) {
+        require(content.toByteArray(StandardCharsets.UTF_8).size <= MAX_GUIDELINE_BYTES) {
+            "Repository guideline content exceeds the 2 MB safety limit."
+        }
+        require(detect().any { it.relativePath == relativePath }) {
+            "Not a detected repository guideline source: $relativePath"
+        }
+        val root = ProjectRoot.path(project)
+        val path = PathSafety.resolveInside(root, relativePath)
+        require(Files.isRegularFile(path)) { "Repository guideline source no longer exists: $relativePath" }
+        val virtualFile =
+            LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
+                ?: throw IllegalStateException("Repository guideline source is unavailable in the project: $relativePath")
+        checkNotNull(FileDocumentManager.getInstance().getDocument(virtualFile)) {
+            "Repository guideline source is not editable text: $relativePath"
+        }
+        WriteCommandAction
+            .writeCommandAction(project)
+            .withName("Save Copilot repository guideline")
+            .run<RuntimeException> {
+                VfsUtil.saveText(virtualFile, content)
+            }
+        FileDocumentManager.getInstance().getDocument(virtualFile)?.let(FileDocumentManager.getInstance()::saveDocument)
+    }
+
     private fun read(
         path: Path,
         relative: String,
     ): String {
-        val text = Files.readString(path, StandardCharsets.UTF_8)
+        val text = readRaw(path)
         if (relative == "pyproject.toml") {
             return text
                 .lineSequence()
@@ -133,5 +175,16 @@ class GuidelineService(
                 .ifBlank { "README detected but no explicit guideline section was found." }
         }
         return text
+    }
+
+    private fun readRaw(path: Path): String {
+        val virtualFile = LocalFileSystem.getInstance().findFileByNioFile(path)
+        return virtualFile
+            ?.let { FileDocumentManager.getInstance().getCachedDocument(it)?.text }
+            ?: Files.readString(path, StandardCharsets.UTF_8)
+    }
+
+    companion object {
+        private const val MAX_GUIDELINE_BYTES = 2 * 1024 * 1024
     }
 }

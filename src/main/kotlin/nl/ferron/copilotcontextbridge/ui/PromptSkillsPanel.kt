@@ -20,7 +20,9 @@ import javax.swing.JPanel
 import javax.swing.JSplitPane
 import javax.swing.ListSelectionModel
 
-class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
+class PromptSkillsPanel(
+    private val onLibraryChanged: () -> Unit = {},
+) : JPanel(BorderLayout(8, 8)) {
     private val model = DefaultListModel<String>()
     private val list = JBList(model)
     private val name = JBTextField()
@@ -91,13 +93,13 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
         refresh()
     }
 
-    fun refresh() {
+    fun refresh(preferredIndex: Int = list.selectedIndex) {
         model.clear()
         AppSettings
             .getInstance()
             .state.promptSkills
             .forEach { model.addElement("${it.category.ifBlank { "Custom" }}  ·  ${it.name}") }
-        if (model.size > 0) list.selectedIndex = list.selectedIndex.coerceIn(0, model.size - 1)
+        list.selectedIndex = PromptSkillLibraryEditor.selectionAfterRefresh(preferredIndex, model.size)
     }
 
     private fun loadSelected() {
@@ -114,25 +116,31 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
     }
 
     private fun saveSelected() {
+        val selectedIndex = list.selectedIndex
         val skill =
             AppSettings
                 .getInstance()
                 .state.promptSkills
                 .getOrNull(list.selectedIndex) ?: return
-        if (name.text.isBlank() || prompt.text.isBlank()) return
+        if (name.text.isBlank() || prompt.text.isBlank()) {
+            showError("Prompt skill cannot be saved", "Name and prompt are required. Guidelines may be empty.")
+            return
+        }
         skill.name = name.text.trim()
         skill.category = category.text.trim().ifBlank { "Custom" }
         skill.description = description.text.trim()
         skill.prompt = prompt.text.trim()
         skill.guidelines = guidelines.text.trim()
-        refresh()
+        refresh(selectedIndex)
+        onLibraryChanged()
     }
 
     private fun addSkill() {
         val id = "custom-${UUID.randomUUID().toString().take(8)}"
         PromptSkillLibraryEditor.add(AppSettings.getInstance().state.promptSkills, id)
-        refresh()
+        refresh(model.size)
         list.selectedIndex = model.size - 1
+        onLibraryChanged()
     }
 
     private fun duplicateSkill() {
@@ -148,11 +156,20 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
         )
         refresh()
         list.selectedIndex = model.size - 1
+        onLibraryChanged()
     }
 
     private fun deleteSkill() {
         val skills = AppSettings.getInstance().state.promptSkills
         if (skills.size <= 1 || list.selectedIndex !in skills.indices) return
+        if (PromptSkillLibraryEditor.isBuiltIn(skills[list.selectedIndex])) {
+            com.intellij.openapi.ui.Messages.showInfoMessage(
+                this,
+                "Built-in prompt skills can be edited or duplicated, but only custom prompt skills can be deleted.",
+                "Built-in Prompt Skill",
+            )
+            return
+        }
         if (
             com.intellij.openapi.ui.Messages.showYesNoDialog(
                 this,
@@ -163,8 +180,10 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
         ) {
             return
         }
-        PromptSkillLibraryEditor.remove(skills, list.selectedIndex)
-        refresh()
+        val removedIndex = list.selectedIndex
+        PromptSkillLibraryEditor.remove(skills, removedIndex)
+        refresh(PromptSkillLibraryEditor.selectionAfterRemoval(removedIndex, skills.size))
+        onLibraryChanged()
     }
 
     private fun editPolicy() {
@@ -173,7 +192,11 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
                 .getInstance()
                 .state.promptSkills
                 .getOrNull(list.selectedIndex) ?: return
-        if (ContextPolicyDialog(skill.id, skill.name, skill.contextPolicy).showAndGet()) refresh()
+        val selectedIndex = list.selectedIndex
+        if (ContextPolicyDialog(skill.id, skill.name, skill.contextPolicy).showAndGet()) {
+            refresh(selectedIndex)
+            onLibraryChanged()
+        }
     }
 
     private fun exportSkills() {
@@ -194,7 +217,8 @@ class PromptSkillsPanel : JPanel(BorderLayout(8, 8)) {
             runCatching {
                 val imported = PromptSkillLibraryCodec.decode(Files.readString(chooser.selectedFile.toPath()))
                 AppSettings.getInstance().state.promptSkills = imported.toMutableList()
-                refresh()
+                refresh(0)
+                onLibraryChanged()
             }.onFailure { showError("Skill import rejected", it.message ?: "Invalid skill library") }
         }
     }

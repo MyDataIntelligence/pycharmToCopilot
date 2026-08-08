@@ -53,7 +53,7 @@ data class ContextPolicyProjection(
                     }.getOrDefault(PreviousBatchMode.SAME_SESSION_ONLY)
                 ) {
                     PreviousBatchMode.NEVER -> false
-                    PreviousBatchMode.SAME_SESSION_ONLY, PreviousBatchMode.ALWAYS -> fallback.avoidPreviouslySentFiles
+                    PreviousBatchMode.SAME_SESSION_ONLY, PreviousBatchMode.ALWAYS -> true
                 },
             includeTemplates = policy.isEnabled("repository.templates"),
             includeSimilarImplementations = policy.isEnabled("repository.similarImplementations"),

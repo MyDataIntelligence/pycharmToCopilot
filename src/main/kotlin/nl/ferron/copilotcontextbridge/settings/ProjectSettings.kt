@@ -45,7 +45,8 @@ class ProjectSettings : PersistentStateComponent<ProjectSettings.Data> {
 
         @JvmField var avoidPreviouslySentFiles: Boolean = true
 
-        @JvmField var clearActiveSelectionAfterExport: Boolean = true
+        /** Legacy persisted option. Preparing a batch never clears pins; Next batch is the explicit clearing action. */
+        @JvmField var clearActiveSelectionAfterExport: Boolean = false
 
         @JvmField var openToolWindowOnStartup: Boolean = true
 
@@ -72,6 +73,7 @@ class ProjectSettings : PersistentStateComponent<ProjectSettings.Data> {
         defaultScores().forEach { (key, value) -> data.scores.putIfAbsent(key, value) }
         data.maximumUploadFiles = data.maximumUploadFiles.coerceIn(2, 20)
         data.textualScanLimitBytes = data.textualScanLimitBytes.coerceIn(64 * 1024L, 20L * 1024L * 1024L)
+        data.clearActiveSelectionAfterExport = false
     }
 
     companion object {

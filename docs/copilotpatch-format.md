@@ -2,6 +2,8 @@
 
 The primary format is UTF-8 JSON. The importer also accepts `.json` only after schema sniffing, and ZIP packages with `changes.json` at archive root. Required root fields are `formatVersion: 1`, `repositoryId`, `sessionId`, and one or more entries in `replacements`. `summary` is strongly recommended.
 
+Paths must already be canonical repository-relative `.py` paths. Hashes use exactly `sha256:` plus 64 lowercase hexadecimal characters. A patch cannot contain duplicate target identities, and a whole-file operation cannot be combined with another operation for the same file.
+
 ## Operations
 
 ### `replace_function`
@@ -75,7 +77,7 @@ copilot-result.zip
     └── 002_test_new_helper.py
 ```
 
-`replacementFile` paths are archive-relative and must stay within `replacements/`. Limits are 20 MB compressed archive, 50 MB expanded, 10 MB per entry, 100 entries and 50 operations. Absolute paths, traversal, symlink-like escapes, duplicate unsafe entries and oversized expansion are rejected.
+`replacementFile` paths are canonical archive-relative paths and must stay within `replacements/`. Limits are 20 MB compressed archive, 50 MB expanded, 10 MB per entry, 100 entries and 50 operations. Absolute paths, traversal, symlink-like escapes, duplicate entries and oversized expansion are rejected.
 
 ## Validation and preview states
 

@@ -1,6 +1,8 @@
 package nl.ferron.copilotcontextbridge.patch
 
 import com.intellij.openapi.command.undo.UndoManager
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiManager
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -301,6 +303,201 @@ class PatchApplicationTest : BasePlatformTestCase() {
         assertTrue(first.text.contains("return 'keep'"))
         assertTrue(second.text.contains("return 20"))
         assertTrue(UndoManager.getInstance(project).isUndoAvailable(null))
+    }
+
+    fun testInvalidPatchCannotBypassValidationThroughApplyService() {
+        val file = myFixture.addFileToProject("module.py", "def work():\n    return 1\n") as PyFile
+        val request = replacement("module.py", file, "work", "def work():\n    return 2\n")
+        val invalid =
+            PatchValidator(project, { file }, "different-repository")
+                .validate(patch(request))
+
+        assertFalse(invalid.validation.valid)
+        val result = PythonFunctionReplacementService(project).apply(invalid, setOf("module.py::work"), emptySet())
+
+        assertEmpty(result.applied)
+        assertEquals(listOf("Patch validation failed; no project files were modified."), result.failures)
+        assertTrue(file.text.contains("return 1"))
+    }
+
+    fun testDeleteFileHashUsesExactSavedBytesInsteadOfNormalizedPsiText() {
+        val file = myFixture.addFileToProject("src/windows_lines.py", "VALUE = 1\r\n") as PyFile
+        FileDocumentManager.getInstance().saveAllDocuments()
+        val exactHash =
+            "sha256:" +
+                java.security.MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(file.virtualFile.contentsToByteArray())
+                    .joinToString("") { "%02x".format(it) }
+        val request =
+            FunctionReplacement(
+                "delete_file",
+                "src/windows_lines.py",
+                FILE_OPERATION_QUALIFIED_NAME,
+                exactHash,
+                null,
+                null,
+            )
+
+        val validation = validator(request.path, file).validate(patch(request))
+
+        assertEquals(
+            ReplacementStatus.MATCH,
+            validation.targets
+                .single()
+                .validated.status,
+        )
+    }
+
+    fun testOneUndoRestoresReplacementAdditionNewFileAndDeletionTogether() {
+        val changed = myFixture.addFileToProject("src/changed.py", "def changed():\n    return 1\n") as PyFile
+        val additions = myFixture.addFileToProject("src/additions.py", "def existing():\n    return 0\n") as PyFile
+        val deleted = myFixture.addFileToProject("src/deleted.py", "VALUE = 'keep until apply'\n") as PyFile
+        val root = rootOf("src/changed.py", changed)
+        val requests =
+            listOf(
+                replacement("src/changed.py", changed, "changed", "def changed():\n    return 2\n"),
+                FunctionReplacement(
+                    "add_function",
+                    "src/additions.py",
+                    "created",
+                    null,
+                    "def created():\n    return 3\n",
+                    null,
+                    parentQualifiedName = "",
+                    insertAfterQualifiedName = "existing",
+                ),
+                FunctionReplacement(
+                    "add_file",
+                    "src/new_file.py",
+                    FILE_OPERATION_QUALIFIED_NAME,
+                    null,
+                    "def new_file():\n    return 4\n",
+                    null,
+                ),
+                FunctionReplacement(
+                    "delete_file",
+                    "src/deleted.py",
+                    FILE_OPERATION_QUALIFIED_NAME,
+                    FileContentHasher.hash(deleted),
+                    null,
+                    null,
+                ),
+            )
+        val files = mapOf("src/changed.py" to changed, "src/additions.py" to additions, "src/deleted.py" to deleted)
+        val validation = PatchValidator(project, files::get, "fixture-repository", root).validate(patch(*requests.toTypedArray()))
+        val keys = requests.mapTo(linkedSetOf()) { "${it.path}::${it.qualifiedName}" }
+
+        val result = PythonFunctionReplacementService(project).apply(validation, keys, emptySet())
+
+        assertEquals(4, result.applied.size)
+        assertTrue(changed.text.contains("return 2"))
+        assertSize(1, PythonFunctionLocator.find(additions, "created"))
+        assertNotNull(myFixture.findFileInTempDir("src/new_file.py"))
+        assertNull(myFixture.findFileInTempDir("src/deleted.py"))
+
+        UndoManager.getInstance(project).undo(null)
+
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
+        val restoredChanged = PsiManager.getInstance(project).findFile(myFixture.findFileInTempDir("src/changed.py")) as PyFile
+        val restoredAdditions = PsiManager.getInstance(project).findFile(myFixture.findFileInTempDir("src/additions.py")) as PyFile
+        assertTrue(restoredChanged.text.contains("return 1"))
+        assertEmpty(PythonFunctionLocator.find(restoredAdditions, "created"))
+        assertNull(myFixture.findFileInTempDir("src/new_file.py"))
+        assertNotNull(myFixture.findFileInTempDir("src/deleted.py"))
+    }
+
+    fun testMultipleNewFunctionsSharingAnchorKeepPatchOrder() {
+        val file = myFixture.addFileToProject("src/order.py", "def anchor():\n    return 0\n") as PyFile
+        val additions =
+            listOf("first", "second").map { name ->
+                FunctionReplacement(
+                    "add_function",
+                    "src/order.py",
+                    name,
+                    null,
+                    "def $name():\n    return '$name'\n",
+                    null,
+                    parentQualifiedName = "",
+                    insertAfterQualifiedName = "anchor",
+                )
+            }
+        val validation = validator("src/order.py", file).validate(patch(*additions.toTypedArray()))
+        val result =
+            PythonFunctionReplacementService(project).apply(
+                validation,
+                additions.mapTo(linkedSetOf()) { "${it.path}::${it.qualifiedName}" },
+                emptySet(),
+            )
+
+        assertEquals(2, result.applied.size)
+        assertTrue(file.text.indexOf("def anchor") < file.text.indexOf("def first"))
+        assertTrue(file.text.indexOf("def first") < file.text.indexOf("def second"))
+    }
+
+    fun testReplacesCompleteDecoratedAsyncMethodAndNestedFunction() {
+        val file =
+            myFixture.addFileToProject(
+                "src/complex.py",
+                """
+                class Client:
+                    @staticmethod
+                    async def fetch(value: int) -> int:
+                        '''Old docstring.'''
+                        return value
+
+                def outer() -> int:
+                    prefix = 10
+                    def inner(value: int) -> int:
+                        return value + 1
+                    return inner(prefix)
+                """.trimIndent() + "\n",
+            ) as PyFile
+        val method =
+            replacement(
+                "src/complex.py",
+                file,
+                "Client.fetch",
+                """
+                @staticmethod
+                async def fetch(value: int) -> int:
+                    '''New complete docstring.'''
+                    adjusted = value + 1
+                    return adjusted
+                """.trimIndent(),
+            )
+        val nested =
+            replacement(
+                "src/complex.py",
+                file,
+                "outer.inner",
+                "def inner(value: int) -> int:\n    return value + 2\n",
+            )
+        val validation = validator("src/complex.py", file).validate(patch(method, nested))
+
+        val result =
+            PythonFunctionReplacementService(project).apply(
+                validation,
+                setOf("src/complex.py::Client.fetch", "src/complex.py::outer.inner"),
+                emptySet(),
+            )
+
+        assertEquals(2, result.applied.size)
+        val updatedMethod = PythonFunctionLocator.find(file, "Client.fetch").single()
+        assertTrue(updatedMethod.text.contains("@staticmethod"))
+        assertTrue(
+            nl.ferron.copilotcontextbridge.analysis.SymbolIndexer
+                .isAsync(updatedMethod),
+        )
+        assertTrue(updatedMethod.text.contains("'''New complete docstring.'''") && updatedMethod.text.contains("return adjusted"))
+        assertTrue(
+            PythonFunctionLocator
+                .find(file, "outer.inner")
+                .single()
+                .text
+                .contains("return value + 2"),
+        )
+        assertTrue(file.text.contains("prefix = 10") && file.text.contains("return inner(prefix)"))
     }
 
     fun testOptimizeImportsRunsOnlyWhenExplicitlyEnabled() {

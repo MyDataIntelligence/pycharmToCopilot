@@ -2,6 +2,7 @@ package nl.ferron.copilotcontextbridge.patch
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import nl.ferron.copilotcontextbridge.security.PathSafety
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -31,11 +32,11 @@ class CopilotPatchParser {
             while (true) {
                 val entry = zip.nextEntry ?: break
                 require(!entry.isDirectory) { "ZIP directories are not accepted as patch entries." }
-                val name = entry.name.replace('\\', '/')
-                require(
-                    !name.startsWith('/') && !name.contains("../") && !Regex("^[A-Za-z]:").containsMatchIn(name),
-                ) { "Unsafe ZIP entry: $name" }
+                val suppliedName = entry.name.replace('\\', '/')
+                val name = PathSafety.normalizeRelative(suppliedName)
                 require(entries.size < MAX_ENTRIES) { "ZIP contains too many entries." }
+                require(name !in entries) { "ZIP contains a duplicate entry: $name" }
+                require(name == suppliedName) { "ZIP entry must use a canonical repository-relative path: $suppliedName" }
                 val data = zip.readNBytes(MAX_ENTRY_BYTES + 1)
                 require(data.size <= MAX_ENTRY_BYTES) { "ZIP entry is too large: $name" }
                 total += data.size
@@ -59,6 +60,8 @@ class CopilotPatchParser {
         require(version == 1) { "Unsupported formatVersion: $version" }
         val repositoryId = root.requiredString("repositoryId")
         val sessionId = root.requiredString("sessionId")
+        require(repositoryId.length <= MAX_ID_LENGTH) { "repositoryId is too long." }
+        require(sessionId.length <= MAX_ID_LENGTH) { "sessionId is too long." }
         val array = root.getAsJsonArray("replacements") ?: error("replacements must be an array.")
         require(array.size() in 1..MAX_REPLACEMENTS) { "Patch must contain 1..$MAX_REPLACEMENTS replacements." }
         val replacements =
@@ -69,8 +72,21 @@ class CopilotPatchParser {
                 require(operation in setOf("replace_function", "add_function", "add_file", "delete_file")) {
                     "Unsupported operation: $operation"
                 }
+                val suppliedPath = item.requiredString("path")
+                val path = PathSafety.normalizeRelative(suppliedPath)
+                require(path == suppliedPath.replace('\\', '/')) {
+                    "Replacement $index path must already be canonical: $suppliedPath"
+                }
+                require(path.endsWith(".py", ignoreCase = true)) { "Replacement $index target must be a Python file." }
+                require(path.length <= MAX_PATH_LENGTH) { "Replacement $index path is too long." }
                 val embedded = item.optionalString("replacement")
                 val reference = item.optionalString("replacementFile")
+                if (reference != null) {
+                    val normalizedReference = PathSafety.normalizeRelative(reference)
+                    require(reference.replace('\\', '/') == normalizedReference && normalizedReference.startsWith("replacements/")) {
+                        "replacementFile must be a canonical path below replacements/: $reference"
+                    }
+                }
                 val requiresContent = operation != "delete_file"
                 if (requiresContent) {
                     require((embedded == null) xor (reference == null)) {
@@ -90,67 +106,104 @@ class CopilotPatchParser {
                 require(replacementText == null || replacementText.toByteArray(StandardCharsets.UTF_8).size <= MAX_ENTRY_BYTES) {
                     "Replacement $index is too large."
                 }
-                FunctionReplacement(
-                    operation,
-                    item.requiredString("path"),
-                    if (operation.endsWith(
-                            "_file",
-                        )
-                    ) {
-                        item.optionalString("qualifiedName") ?: FILE_OPERATION_QUALIFIED_NAME
+                val qualifiedName =
+                    if (operation.endsWith("_file")) {
+                        item.optionalString("qualifiedName")?.also {
+                            require(it == FILE_OPERATION_QUALIFIED_NAME) {
+                                "$operation qualifiedName must be omitted or '$FILE_OPERATION_QUALIFIED_NAME'."
+                            }
+                        } ?: FILE_OPERATION_QUALIFIED_NAME
                     } else {
                         item.requiredString("qualifiedName")
-                    },
+                    }
+                val originalHash =
                     if (operation in setOf("replace_function", "delete_file")) {
-                        item.requiredString("originalHash")
+                        item.requiredString("originalHash").also(::requireSha256)
                     } else {
-                        item.optionalString("originalHash")
-                    },
+                        item.optionalString("originalHash")?.also {
+                            error("$operation must not contain originalHash.")
+                        }
+                    }
+                val parentQualifiedName =
+                    if (operation == "add_function") {
+                        item.requiredStringAllowEmpty("parentQualifiedName")
+                    } else {
+                        item.optionalString("parentQualifiedName")
+                    }
+                FunctionReplacement(
+                    operation,
+                    path,
+                    qualifiedName,
+                    originalHash,
                     replacementText,
                     reference,
-                    item.get("allowAsyncChange")?.asBoolean ?: false,
-                    item.get("allowDecoratorKindChange")?.asBoolean ?: false,
-                    item.optionalString("parentQualifiedName"),
+                    item.optionalBoolean("allowAsyncChange") ?: false,
+                    item.optionalBoolean("allowDecoratorKindChange") ?: false,
+                    parentQualifiedName,
                     item.optionalString("insertAfterQualifiedName"),
                 )
             }
+        val duplicateTargets =
+            replacements
+                .groupBy { "${it.path}::${it.qualifiedName}" }
+                .filterValues { it.size > 1 }
+                .keys
+        require(duplicateTargets.isEmpty()) {
+            "Patch contains duplicate target operations: ${duplicateTargets.sorted().joinToString()}."
+        }
         val summary =
             root.getAsJsonObject("summary")?.let { item ->
                 PatchSummary(
-                    item.optionalString("overview").orEmpty(),
-                    item
-                        .getAsJsonArray("functions")
-                        ?.map { function ->
-                            val value = function.asJsonObject
-                            PatchSummaryItem(
-                                value.requiredString("path"),
-                                value.requiredString("qualifiedName"),
-                                value.requiredString("change"),
-                                value.requiredString("reason"),
-                            )
-                        }.orEmpty(),
-                    item.stringList("testsPerformed"),
-                    item.stringList("risks"),
-                    item.stringList("limitations"),
+                    item.requiredStringAllowEmpty("overview"),
+                    item.requiredArray("functions").map { function ->
+                        val value = function.asJsonObject
+                        PatchSummaryItem(
+                            value.requiredString("path"),
+                            value.requiredString("qualifiedName"),
+                            value.requiredString("change"),
+                            value.requiredString("reason"),
+                        )
+                    },
+                    item.requiredStringList("testsPerformed"),
+                    item.requiredStringList("risks"),
+                    item.requiredStringList("limitations"),
                 )
             }
         return CopilotPatch(version, repositoryId, sessionId, replacements, summary)
     }
 
     private fun JsonObject.requiredString(name: String): String =
-        get(name)?.takeIf { it.isJsonPrimitive }?.asString?.takeIf { it.isNotBlank() }
+        get(name)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.takeIf { it.isNotBlank() }
             ?: error("Missing or empty string: $name")
 
-    private fun JsonObject.optionalString(name: String): String? = get(name)?.takeIf { !it.isJsonNull }?.asString
+    private fun JsonObject.requiredStringAllowEmpty(name: String): String =
+        get(name)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+            ?: error("Missing string: $name")
+
+    private fun JsonObject.optionalString(name: String): String? {
+        val value = get(name) ?: return null
+        require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "$name must be a string." }
+        return value.asString
+    }
+
+    private fun JsonObject.optionalBoolean(name: String): Boolean? {
+        val value = get(name) ?: return null
+        require(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean) { "$name must be a boolean." }
+        return value.asBoolean
+    }
 
     private fun JsonObject.requiredInt(name: String): Int =
-        get(name)?.takeIf { it.isJsonPrimitive }?.asInt ?: error("Missing integer: $name")
+        get(name)
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber && INTEGER_PATTERN.matches(it.asString) }
+            ?.asInt ?: error("Missing integer: $name")
 
-    private fun JsonObject.stringList(name: String): List<String> =
-        getAsJsonArray(name)
-            ?.mapNotNull {
-                it.takeIf { value -> value.isJsonPrimitive }?.asString
-            }.orEmpty()
+    private fun JsonObject.requiredArray(name: String) = get(name)?.takeIf { it.isJsonArray }?.asJsonArray ?: error("Missing array: $name")
+
+    private fun JsonObject.requiredStringList(name: String): List<String> =
+        requiredArray(name).mapIndexed { index, value ->
+            require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "$name[$index] must be a string." }
+            value.asString
+        }
 
     companion object {
         const val MAX_ARCHIVE_BYTES = 20L * 1024L * 1024L
@@ -158,5 +211,14 @@ class CopilotPatchParser {
         const val MAX_ENTRY_BYTES = 10 * 1024 * 1024
         const val MAX_ENTRIES = 100
         const val MAX_REPLACEMENTS = 50
+        const val MAX_ID_LENGTH = 256
+        const val MAX_PATH_LENGTH = 4096
+
+        private val SHA256_PATTERN = Regex("^sha256:[0-9a-f]{64}$")
+        private val INTEGER_PATTERN = Regex("^-?[0-9]+$")
+
+        private fun requireSha256(value: String) {
+            require(SHA256_PATTERN.matches(value)) { "originalHash must be a lowercase SHA-256 value." }
+        }
     }
 }

@@ -109,15 +109,19 @@ class ContextSelectionService(
 
     fun addSelection(files: Collection<VirtualFile>) {
         val root = ProjectRoot.virtualFile(project)
-        addFiles(files.filterNot { it.isDirectory })
-        files.filter { it.isDirectory && it.isInLocalFileSystem && VfsUtilCore.isAncestor(root, it, false) }.forEach { directory ->
+        files.filter { it.isInLocalFileSystem && VfsUtilCore.isAncestor(root, it, false) }.forEach { selected ->
             val path =
-                directory.path
+                selected.path
                     .removePrefix(root.path)
                     .trimStart('/')
                     .replace('\\', '/')
-            if (path !in data.discoveryRoots) data.discoveryRoots.add(path)
+            if (selected.isDirectory) {
+                if (path !in data.discoveryRoots) data.discoveryRoots.add(path)
+            } else if (path.isNotBlank() && path !in data.pinnedPaths) {
+                data.pinnedPaths.add(path)
+            }
         }
+        validatePaths()
         fireChanged()
     }
 
@@ -279,6 +283,12 @@ class ContextSelectionService(
 
     fun removeListener(listener: () -> Unit) {
         listeners.remove(listener)
+    }
+
+    /** Invalidates any current preview after settings-only actions that do not otherwise mutate selection state. */
+    fun requestRecalculation() {
+        validatePaths()
+        fireChanged()
     }
 
     fun validatePaths() {

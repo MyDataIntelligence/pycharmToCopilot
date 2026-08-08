@@ -28,6 +28,7 @@ import nl.ferron.copilotcontextbridge.model.sourceKey
 import nl.ferron.copilotcontextbridge.patch.CopilotPatchSniffer
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.ProjectSettings
+import nl.ferron.copilotcontextbridge.settings.ProjectSettingsConfigurable
 import nl.ferron.copilotcontextbridge.settings.ReturnInstructions
 import nl.ferron.copilotcontextbridge.staging.CombinedContextTextBuilder
 import nl.ferron.copilotcontextbridge.staging.FileListTransferable
@@ -89,7 +90,7 @@ class CopilotContextPanel(
     private val automaticFiles = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
     private val preview = JBTextArea().apply { isEditable = false }
     private val historyText = JBTextArea().apply { isEditable = false }
-    private val skillCombo = JComboBox<String>()
+    private val skillCombo = JComboBox<PromptSkillChoice>()
     private val batchCombo = JComboBox<String>()
     private val dragLabel = JLabel("Drag becomes available after preparation", AllIcons.Actions.Upload, SwingConstants.CENTER)
     private val prepareButton = greenActionButton("Prepare for Copilot") { prepareBatch() }
@@ -117,6 +118,7 @@ class CopilotContextPanel(
             invalidatePreparedBatch()
             recalculate()
         }
+    private val promptSkillsPanel = PromptSkillsPanel(::promptLibraryChanged)
     private val importPanel = PatchImportPanel(project)
     private val detailsLayout = CardLayout()
     private val detailsHost = JPanel(detailsLayout)
@@ -130,6 +132,8 @@ class CopilotContextPanel(
     private var calculating = false
     private var preparing = false
     private var refreshingSkills = false
+    private var refreshingHistory = false
+    private val copyContextButtons = mutableListOf<JButton>()
     private val analysisGeneration = AtomicInteger()
 
     @Volatile private var activeAnalysis: ProgressIndicator? = null
@@ -139,8 +143,14 @@ class CopilotContextPanel(
         detailTabs.addTab("More Copilot actions", createMoreActionsPanel())
         detailTabs.addTab("Context files", contextFilesPanel)
         detailTabs.addTab("Context preview", createPreviewPanel())
-        detailTabs.addTab("Guidelines", GuidelinesPanel(project))
-        detailTabs.addTab("Prompt skills", PromptSkillsPanel())
+        detailTabs.addTab(
+            "Guidelines",
+            GuidelinesPanel(project) {
+                invalidatePreparedBatch()
+                recalculate()
+            },
+        )
+        detailTabs.addTab("Prompt skills", promptSkillsPanel)
         detailTabs.addTab("Return instructions", returnInstructionsPanel)
         detailsHost.add(detailTabs, DetailMode.MORE.name)
         detailsHost.add(importPanel, DetailMode.IMPORT.name)
@@ -164,8 +174,8 @@ class CopilotContextPanel(
 
         skillCombo.addActionListener {
             if (refreshingSkills) return@addActionListener
-            val selected = skillCombo.selectedItem as? String ?: return@addActionListener
-            AppSettings.getInstance().state.promptSkills.firstOrNull { skillLabel(it) == selected }?.let {
+            val selected = skillCombo.selectedItem as? PromptSkillChoice ?: return@addActionListener
+            AppSettings.getInstance().state.promptSkills.firstOrNull { it.id == selected.id }?.let {
                 if (projectSettings.state.selectedPromptSkillId != it.id) {
                     projectSettings.state.selectedPromptSkillId = it.id
                     returnInstructionsPanel.refresh()
@@ -173,6 +183,9 @@ class CopilotContextPanel(
                     recalculate()
                 }
             }
+        }
+        batchCombo.addActionListener {
+            if (!refreshingHistory) showSelectedBatchDetails()
         }
         configureDragSource()
         selectionService.addListener {
@@ -296,12 +309,7 @@ class CopilotContextPanel(
             )
             add(Box.createVerticalStrut(JBUI.scale(6)))
             add(dragLabel)
-            add(
-                actionRow(
-                    JLabel("Please read 00_REPO_CONTEXT.md first; it indexes this batch.").apply { foreground = JBColor.GRAY },
-                    JButton("Copy prompt").apply { addActionListener { copyBatchPrompt() } },
-                ),
-            )
+            add(JLabel("00_REPO_CONTEXT.md is included automatically and indexes this batch.").apply { foreground = JBColor.GRAY })
             add(actionGrid(copyButton, copyAllTextButton, openButton, nextButton))
             add(createReturnDropZone())
             components.filterIsInstance<javax.swing.JComponent>().forEach { it.alignmentX = LEFT_ALIGNMENT }
@@ -433,26 +441,13 @@ class CopilotContextPanel(
             val navigation =
                 JPanel(GridLayout(0, 2, 8, 8)).apply {
                     border = BorderFactory.createTitledBorder("Manage context")
-                    add(navigationButton("Context files", "Included, omitted and excluded files", AllIcons.FileTypes.Text, 1))
-                    add(navigationButton("Context preview", "Inspect the complete outgoing pack", AllIcons.FileTypes.Text, 2))
-                    add(navigationButton("Guidelines", "Repository and global instructions", AllIcons.General.InspectionsOK, 3))
-                    add(navigationButton("Prompt skills", "Prompts with their own guidelines", AllIcons.General.User, 4))
-                    add(navigationButton("Return instructions", "Effective Copilot output contract", AllIcons.Actions.Copy, 5))
-                    add(
-                        JButton(
-                            "<html><b>Settings</b><br><font color='#888888'>Limits, exclusions and behaviour</font></html>",
-                            AllIcons.General.GearPlain,
-                        ).apply {
-                            horizontalAlignment = SwingConstants.LEFT
-                            addActionListener { openSettings() }
-                        },
-                    )
+                    MoreWorkspaceModel.destinations.forEach { destination -> add(moreDestinationButton(destination)) }
                 }
             val quickCopy =
                 JPanel(GridLayout(1, 2, 8, 0)).apply {
                     border = BorderFactory.createTitledBorder("Quick copy")
-                    add(JButton("Copy context").apply { addActionListener { UiSupport.copyText(preview.text) } })
-                    add(JButton("Copy return instructions").apply { addActionListener { copyReturnInstructions() } })
+                    add(contextCopyButton(MoreWorkspaceModel.quickActions[0]))
+                    add(JButton(MoreWorkspaceModel.quickActions[1]).apply { addActionListener { copyReturnInstructions() } })
                 }
             add(
                 JPanel().apply {
@@ -466,15 +461,31 @@ class CopilotContextPanel(
             add(createHistoryPanel(), BorderLayout.CENTER)
         }
 
-    private fun navigationButton(
-        title: String,
-        subtitle: String,
-        icon: javax.swing.Icon,
-        tab: Int,
-    ) = JButton("<html><b>$title</b><br><font color='#888888'>$subtitle</font></html>", icon).apply {
-        horizontalAlignment = SwingConstants.LEFT
-        addActionListener { detailTabs.selectedIndex = tab }
+    private fun moreDestinationButton(destination: MoreWorkspaceModel.Destination): JButton {
+        val icon =
+            when (destination.title) {
+                "Guidelines" -> AllIcons.General.InspectionsOK
+                "Prompt skills" -> AllIcons.General.User
+                "Return instructions" -> AllIcons.Actions.Copy
+                "Settings" -> AllIcons.General.GearPlain
+                else -> AllIcons.FileTypes.Text
+            }
+        return JButton(
+            "<html><b>${destination.title}</b><br><font color='#888888'>${destination.subtitle}</font></html>",
+            icon,
+        ).apply {
+            horizontalAlignment = SwingConstants.LEFT
+            addActionListener {
+                destination.tabIndex?.let { detailTabs.selectedIndex = it } ?: openSettings()
+            }
+        }
     }
+
+    private fun contextCopyButton(text: String) =
+        JButton(text).apply {
+            addActionListener { copyCurrentContext() }
+            copyContextButtons += this
+        }
 
     private fun createHistoryPanel() =
         JPanel(BorderLayout(5, 5)).apply {
@@ -488,7 +499,7 @@ class CopilotContextPanel(
                             add(JButton("Restore").apply { addActionListener { selectedBatchId()?.let(selectionService::restoreBatch) } })
                             add(JButton("Keep staged files").apply { addActionListener { keepSelectedSession() } })
                             add(JButton("Delete staged files").apply { addActionListener { deleteSelectedSession() } })
-                            add(JButton("Forget").apply { addActionListener { selectedBatchId()?.let(selectionService::deleteBatch) } })
+                            add(JButton("Forget").apply { addActionListener { forgetSelectedBatch() } })
                         },
                         BorderLayout.CENTER,
                     )
@@ -503,7 +514,7 @@ class CopilotContextPanel(
             border = JBUI.Borders.empty(8)
             add(
                 actionRow(
-                    JButton("Copy context only").apply { addActionListener { UiSupport.copyText(preview.text) } },
+                    contextCopyButton("Copy context only"),
                     JButton("Copy return instructions").apply { addActionListener { copyReturnInstructions() } },
                 ),
                 BorderLayout.NORTH,
@@ -596,20 +607,13 @@ class CopilotContextPanel(
         try {
             val selectedId = projectSettings.state.selectedPromptSkillId
             skillCombo.removeAllItems()
-            AppSettings
-                .getInstance()
-                .state.promptSkills
-                .forEach { skillCombo.addItem(skillLabel(it)) }
-            skillCombo.selectedItem = AppSettings
-                .getInstance()
-                .state.promptSkills
-                .firstOrNull { it.id == selectedId }
-                ?.let(::skillLabel)
-                ?: AppSettings
+            val choices =
+                AppSettings
                     .getInstance()
                     .state.promptSkills
-                    .firstOrNull()
-                    ?.let(::skillLabel)
+                    .map { PromptSkillChoice(it.id, skillLabel(it)) }
+            choices.forEach(skillCombo::addItem)
+            skillCombo.selectedItem = choices.firstOrNull { it.id == selectedId } ?: choices.firstOrNull()
         } finally {
             refreshingSkills = false
         }
@@ -626,8 +630,11 @@ class CopilotContextPanel(
         val generation = analysisGeneration.incrementAndGet()
         activeAnalysis?.cancel()
         calculating = true
+        pack = null
         refreshSkills()
         status.text = "Analysing repository…"
+        preview.text = "Context preview is being recalculated…"
+        updateControls()
         object : Task.Backgroundable(project, "Calculating Copilot context", true) {
             override fun run(indicator: ProgressIndicator) {
                 activeAnalysis = indicator
@@ -682,6 +689,7 @@ class CopilotContextPanel(
                 else -> "Safe selection ready • ${formatBytes(result.estimatedBytes)}"
             }
         renderFileList(pinnedFiles, result.selection.included.filter { it.pinned }, true)
+        renderInvalidPinnedPaths()
         renderFileList(automaticFiles, result.selection.included.filterNot { it.pinned }, false)
         contextFilesPanel.show(result)
         preview.text = result.markdown
@@ -750,6 +758,37 @@ class CopilotContextPanel(
         }
         panel.revalidate()
         panel.repaint()
+    }
+
+    private fun renderInvalidPinnedPaths() {
+        val invalid = selectionService.invalidPinnedPaths()
+        if (invalid.isEmpty()) return
+        if (pack?.selection?.included?.none { it.pinned } == true) pinnedFiles.removeAll()
+        invalid.forEach { path ->
+            pinnedFiles.add(
+                JPanel(BorderLayout(3, 0)).apply {
+                    isOpaque = false
+                    add(
+                        JLabel("⚠ $path — file moved or deleted").apply {
+                            foreground = JBColor.RED
+                            toolTipText = "Remove this invalid pin, then add the file again from its new location."
+                        },
+                        BorderLayout.CENTER,
+                    )
+                    add(
+                        JButton(AllIcons.Actions.Close).apply {
+                            isContentAreaFilled = false
+                            isBorderPainted = false
+                            toolTipText = "Remove invalid pinned path"
+                            addActionListener { selectionService.removePath(path) }
+                        },
+                        BorderLayout.EAST,
+                    )
+                },
+            )
+        }
+        pinnedFiles.revalidate()
+        pinnedFiles.repaint()
     }
 
     private fun candidateLabel(
@@ -946,19 +985,45 @@ class CopilotContextPanel(
         UiSupport.notify(project, "Return instructions copied", "Copied the effective ${effective.mode.name} instructions.")
     }
 
-    private fun copyBatchPrompt() {
-        UiSupport.copyText(
-            "Please read 00_REPO_CONTEXT.md first. It is the index for this batch.\n\n" +
-                "Then read every attached file listed in that context file.\n\n" +
-                "Follow the selected task instructions and included return instructions.\n\n" +
-                "Use the original repository paths shown in 00_REPO_CONTEXT.md.",
-        )
-        UiSupport.notify(project, "Batch prompt copied", "Paste this before or with the prepared attachments.")
+    private fun copyCurrentContext() {
+        val current = pack ?: return
+        if (calculating || preparing) return
+        UiSupport.copyText(current.markdown)
+        UiSupport.notify(project, "Context copied", "Copied the current generated 00_REPO_CONTEXT.md preview.")
     }
 
-    private fun openSettings() = ShowSettingsUtil.getInstance().showSettingsDialog(project, "Copilot Context Bridge")
+    private fun promptLibraryChanged() {
+        val settings = AppSettings.getInstance()
+        if (settings.state.promptSkills.none { it.id == projectSettings.state.selectedPromptSkillId }) {
+            projectSettings.state.selectedPromptSkillId =
+                settings.state.promptSkills
+                    .first()
+                    .id
+        }
+        refreshSkills()
+        returnInstructionsPanel.refresh()
+        invalidatePreparedBatch()
+        if (!calculating && !preparing) recalculate()
+    }
+
+    private fun openSettings() = ShowSettingsUtil.getInstance().showSettingsDialog(project, ProjectSettingsConfigurable::class.java)
 
     private fun selectedBatchId() = (batchCombo.selectedItem as? String)?.substringBefore(" - ")
+
+    private fun forgetSelectedBatch() {
+        val sessionId = selectedBatchId() ?: return
+        if (
+            Messages.showYesNoDialog(
+                project,
+                "Forget this batch from Bridge history? Staged files are not deleted.",
+                "Forget Batch",
+                null,
+            ) != Messages.YES
+        ) {
+            return
+        }
+        selectionService.deleteBatch(sessionId)
+    }
 
     private fun selectedSessionDirectory(): Path? {
         val sessionId = selectedBatchId() ?: return null
@@ -1017,30 +1082,45 @@ class CopilotContextPanel(
     }
 
     private fun refreshHistory() {
+        val selected = selectedBatchId()
         val batches = selectionService.batches().asReversed()
-        batchCombo.removeAllItems()
-        batches.forEach { batch -> batchCombo.addItem("${batch.sessionId} - ${batch.promptSkillName}") }
+        refreshingHistory = true
+        try {
+            batchCombo.removeAllItems()
+            batches.forEach { batch -> batchCombo.addItem("${batch.sessionId} - ${batch.promptSkillName}") }
+            val restoredIndex = batches.indexOfFirst { it.sessionId == selected }
+            if (restoredIndex >= 0) batchCombo.selectedIndex = restoredIndex
+        } finally {
+            refreshingHistory = false
+        }
+        showSelectedBatchDetails()
+    }
+
+    private fun showSelectedBatchDetails() {
+        val selectedId = selectedBatchId()
+        val selected = selectionService.batches().firstOrNull { it.sessionId == selectedId }
         historyText.text =
             buildString {
-                batches.take(6).forEachIndexed { index, batch ->
-                    val state = if (batch.status == "HANDED_OFF") "✓ Sent/copy started" else "✓ Prepared"
-                    appendLine(
-                        "#${batches.size - index}   ${batch.createdAt.take(
-                            16,
-                        ).replace('T', ' ')}   ${batch.paths.size + 1} files   $state",
-                    )
+                if (selected == null) {
+                    appendLine("No prepared batches yet.")
+                } else {
+                    appendLine("${selected.promptSkillName} · ${selected.createdAt.take(16).replace('T', ' ')}")
+                    appendLine(if (selected.status == "HANDED_OFF") "Sent/copy started" else "Prepared")
+                    appendLine("00_REPO_CONTEXT.md")
+                    selected.paths.forEach(::appendLine)
                 }
-                if (batches.isEmpty()) appendLine("No prepared batches yet.")
             }
     }
 
     private fun updateControls() {
-        prepareButton.isEnabled = pack?.selection?.valid == true && staged == null && !preparing
-        copyButton.isEnabled = staged != null
-        copyAllTextButton.isEnabled = staged != null
-        openButton.isEnabled = staged != null
-        nextButton.isEnabled = staged != null
-        newSessionButton.isEnabled = !calculating && !preparing
+        val state = workflowControlState(pack?.selection?.valid == true, staged != null, calculating, preparing)
+        prepareButton.isEnabled = state.canPrepare
+        copyButton.isEnabled = state.canUsePreparedFiles
+        copyAllTextButton.isEnabled = state.canUsePreparedFiles
+        openButton.isEnabled = state.canUsePreparedFiles
+        nextButton.isEnabled = state.canUsePreparedFiles
+        copyContextButtons.forEach { it.isEnabled = state.canCopyContext }
+        newSessionButton.isEnabled = state.canStartNewSession
     }
 
     private fun formatBytes(bytes: Long) = if (bytes < 1024 * 1024) "${bytes / 1024} KiB" else "%.1f MiB".format(bytes / 1024.0 / 1024.0)

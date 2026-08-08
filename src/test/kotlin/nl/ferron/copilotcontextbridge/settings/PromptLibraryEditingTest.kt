@@ -82,6 +82,41 @@ class PromptLibraryEditingTest : TestCase() {
         assertTrue(decoded.contextPolicy.rules.isNotEmpty())
     }
 
+    fun testListSelectionStaysOnEditedEntryAndMovesPredictablyAfterDelete() {
+        assertEquals(4, PromptSkillLibraryEditor.selectionAfterRefresh(4, 8))
+        assertEquals(2, PromptSkillLibraryEditor.selectionAfterRefresh(7, 3))
+        assertEquals(2, PromptSkillLibraryEditor.selectionAfterRemoval(3, 3))
+        assertEquals(0, PromptSkillLibraryEditor.selectionAfterRemoval(0, 2))
+        assertEquals(-1, PromptSkillLibraryEditor.selectionAfterRefresh(0, 0))
+    }
+
+    fun testBuiltInPromptCannotDisappearAndCustomPromptCanBeDeleted() {
+        val builtIn = AppSettings.defaultPromptSkills().first()
+        val custom = AppSettings.PromptSkillState("custom-delete", "Custom", "", "Prompt")
+        val skills = mutableListOf(builtIn, custom)
+
+        assertTrue(PromptSkillLibraryEditor.isBuiltIn(builtIn))
+        assertFalse(PromptSkillLibraryEditor.remove(skills, 0))
+        assertTrue(PromptSkillLibraryEditor.remove(skills, 1))
+        assertEquals(listOf(builtIn.id), skills.map { it.id })
+    }
+
+    fun testPolicyWorkingCopyCanBeCommittedWithoutSharingRuleState() {
+        val original = AppSettings.defaultPolicyForPrompt("general-change")
+        val working = original.copyOf()
+        working.target = CopilotTarget.GITHUB_COPILOT.name
+        working.rule("matching-tests")?.priority = 321
+
+        assertFalse(original.target == working.target)
+        assertFalse(original.rule("matching-tests")?.priority == working.rule("matching-tests")?.priority)
+
+        ContextPolicyEditor.replaceWith(original, working)
+        working.rule("matching-tests")?.priority = 7
+
+        assertEquals(CopilotTarget.GITHUB_COPILOT.name, original.target)
+        assertEquals(321, original.rule("matching-tests")?.priority)
+    }
+
     private fun assertInvalid(json: String) {
         try {
             PromptSkillLibraryCodec.decode(json)

@@ -208,7 +208,7 @@ class PatchImportPanel(
                     if (generation != validationGeneration.get()) return@invokeLater
                     outcome
                         .onSuccess(::showResult)
-                        .onFailure { showError(it.message ?: "Patch could not be loaded.") }
+                        .onFailure { showLoadError(it.message ?: "Patch could not be loaded.") }
                 }
             }
         }.queue()
@@ -348,18 +348,33 @@ class PatchImportPanel(
             val item = target.validated
             val key = "${item.request.path}::${item.request.qualifiedName}"
             selections[key]?.isSelected = item.status in setOf(ReplacementStatus.MATCH, ReplacementStatus.NEW)
+            if (item.status == ReplacementStatus.CHANGED) forces[key]?.isSelected = false
         }
         updateApplyCaption()
     }
 
     private fun showCombinedDiff() {
-        val targets = current?.targets.orEmpty()
+        val selectedKeys = selections.filterValues { it.isSelected }.keys
+        val targets =
+            current
+                ?.targets
+                .orEmpty()
+                .filter { "${it.validated.request.path}::${it.validated.request.qualifiedName}" in selectedKeys }
+        if (targets.isEmpty()) {
+            UiSupport.notify(
+                project,
+                "No changes selected",
+                "Select at least one validated operation before opening the combined diff.",
+                NotificationType.WARNING,
+            )
+            return
+        }
         diffFacade.showCombinedDiff(targets.map { it.validated })
         diffTitle.text = "Combined diff — ${targets.size} replacement(s)"
     }
 
     private fun deselectConflicts() {
-        forces.keys.forEach { key ->
+        forces.filterValues { it.isVisible }.keys.forEach { key ->
             selections[key]?.isSelected = false
             forces[key]?.isSelected = false
         }
@@ -460,8 +475,7 @@ class PatchImportPanel(
                     if (
                         Messages.showYesNoDialog(
                             project,
-                            "Apply ${selected.size} selected change(s) as one Undoable PyCharm operation?" +
-                                if (forced.isEmpty()) "" else "\n\n${forced.size} conflict decision(s) will use the Copilot version.",
+                            applyConfirmationMessage(refreshed, selected, forced),
                             "Confirm Copilot Function Replacements",
                             "Apply selected",
                             "Cancel",
@@ -504,6 +518,29 @@ class PatchImportPanel(
                     .hash(item.oldText)
         }
 
+    private fun applyConfirmationMessage(
+        result: PatchValidator.Result,
+        selected: Set<String>,
+        forced: Set<String>,
+    ): String {
+        val operations =
+            result.targets.filter { target ->
+                "${target.validated.request.path}::${target.validated.request.qualifiedName}" in selected
+            }
+        val fileOperations =
+            operations.count {
+                it.validated.request.operation
+                    .endsWith("_file")
+            }
+        val functionOperations = operations.size - fileOperations
+        val conflicts = operations.count { it.validated.status == ReplacementStatus.CHANGED }
+        return buildString {
+            append("Apply ${operations.size} selected change(s) as one Undoable PyCharm operation?")
+            append("\n\nFunctions: $functionOperations; whole files: $fileOperations; conflicts: $conflicts.")
+            if (forced.isNotEmpty()) append("\n${forced.size} conflict decision(s) will use the Copilot version.")
+        }
+    }
+
     private fun applyValidated(
         result: PatchValidator.Result,
         selected: Set<String>,
@@ -540,5 +577,18 @@ class PatchImportPanel(
         rows.revalidate()
         rows.repaint()
         UiSupport.notify(project, "Patch rejected", message, NotificationType.ERROR)
+    }
+
+    private fun showLoadError(message: String) {
+        if (current == null) {
+            showError(message)
+        } else {
+            UiSupport.notify(
+                project,
+                "Patch rejected; current review preserved",
+                message,
+                NotificationType.ERROR,
+            )
+        }
     }
 }

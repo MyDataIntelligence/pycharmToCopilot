@@ -83,6 +83,27 @@ class ContextAttachmentPackerTest : TestCase() {
         assertEquals("tests__test_main.py", plan.attachments.single().stagedName)
     }
 
+    fun testCalleeAndNearbyTestUseTheirOwnPackingRules() {
+        val policy = ContextPolicyState.defaultFor("test")
+        policy.rule("direct-callees")!!.bundleGroup = "callees"
+        policy.rule("nearby-tests")!!.apply {
+            enabled = true
+            keepSeparate = true
+        }
+
+        val plan =
+            ContextAttachmentPacker.plan(
+                listOf(
+                    candidate("src/callee.py", RelationType.DIRECT_CALLEE, score = 1_700),
+                    candidate("tests/test_neighbor.py", RelationType.NEARBY_TEST, score = 1_600),
+                ),
+                policy,
+            )
+
+        assertTrue(plan.repositoryToAttachment.getValue("src/callee.py").contains("AUTO_CALLEES"))
+        assertEquals("tests__test_neighbor.py", plan.repositoryToAttachment["tests/test_neighbor.py"])
+    }
+
     fun testUnsupportedMicrosoftTextExtensionGetsTemporaryTxtNameButGitHubTargetDoesNot() {
         val candidate = candidate("tests/robot/login.robot", pinned = true, score = 2_000)
         val microsoftPolicy = ContextPolicyState.defaultFor("m365")

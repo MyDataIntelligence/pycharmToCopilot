@@ -144,18 +144,7 @@ object ContextAttachmentPacker {
         candidate: ContextCandidate,
         policy: ContextPolicyState,
     ): String {
-        val resolver =
-            when {
-                candidate.relations.any { it.type == RelationType.RELATED_TEST } -> "python.matchingTests"
-                candidate.relations.any { it.type == RelationType.TEST_FIXTURE } -> "tests.fixtures"
-                candidate.relations.any { it.type == RelationType.REFERENCED_CONFIGURATION } -> "text.referencedConfiguration"
-                candidate.relations.any { it.type == RelationType.TEMPLATE } -> "repository.templates"
-                candidate.relations.any { it.type == RelationType.SIMILAR_IMPLEMENTATION } -> "repository.similarImplementations"
-                candidate.relations.any { it.type == RelationType.INSTRUCTION } -> "guidelines.project"
-                candidate.relations.any { it.type == RelationType.DIRECT_IMPORT } -> "python.directImports"
-                candidate.relations.any { it.type == RelationType.DIRECT_DEPENDENT } -> "python.directCallers"
-                else -> "repository.references"
-            }
+        val resolver = resolverFor(candidate)
         return policy.rules
             .firstOrNull { it.resolver == resolver && it.enabled }
             ?.bundleGroup
@@ -187,12 +176,14 @@ object ContextAttachmentPacker {
         when {
             candidate.pinned -> "explicit.pinnedFiles"
             candidate.relations.any { it.type == RelationType.RELATED_TEST } -> "python.matchingTests"
+            candidate.relations.any { it.type == RelationType.NEARBY_TEST } -> "tests.nearby"
             candidate.relations.any { it.type == RelationType.TEST_FIXTURE } -> "tests.fixtures"
             candidate.relations.any { it.type == RelationType.REFERENCED_CONFIGURATION } -> "text.referencedConfiguration"
             candidate.relations.any { it.type == RelationType.TEMPLATE } -> "repository.templates"
             candidate.relations.any { it.type == RelationType.SIMILAR_IMPLEMENTATION } -> "repository.similarImplementations"
             candidate.relations.any { it.type == RelationType.INSTRUCTION } -> "guidelines.project"
             candidate.relations.any { it.type == RelationType.DIRECT_IMPORT } -> "python.directImports"
+            candidate.relations.any { it.type == RelationType.DIRECT_CALLEE } -> "python.directCallees"
             candidate.relations.any { it.type == RelationType.DIRECT_DEPENDENT } -> "python.directCallers"
             candidate.relations.any { it.type == RelationType.SECOND_LEVEL } -> "python.transitiveImports"
             else -> "repository.references"

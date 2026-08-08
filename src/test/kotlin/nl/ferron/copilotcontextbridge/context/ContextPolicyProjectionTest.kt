@@ -38,4 +38,18 @@ class ContextPolicyProjectionTest : TestCase() {
 
         assertEquals(20, ContextPolicyProjection.from(policy, fallback).maximumFiles)
     }
+
+    fun testPolicyPreviousBatchModesAreNotDisabledByLegacyProjectCheckbox() {
+        val fallback = ProjectSettings.Data().apply { avoidPreviouslySentFiles = false }
+        val policy = ContextPolicyState.defaultFor("custom")
+
+        policy.previousBatchMode = PreviousBatchMode.SAME_SESSION_ONLY.name
+        assertTrue(ContextPolicyProjection.from(policy, fallback).avoidPrevious)
+
+        policy.previousBatchMode = PreviousBatchMode.ALWAYS.name
+        assertTrue(ContextPolicyProjection.from(policy, fallback).avoidPrevious)
+
+        policy.previousBatchMode = PreviousBatchMode.NEVER.name
+        assertFalse(ContextPolicyProjection.from(policy, fallback).avoidPrevious)
+    }
 }

@@ -121,16 +121,60 @@ class PatchValidator(
                             }.flatMap { second -> listOf(first, second) }
                     }.toSet()
             }
+        val duplicateTargetKeys =
+            patch.replacements
+                .groupBy { "${runCatching { PathSafety.normalizeRelative(it.path) }.getOrDefault(it.path)}::${it.qualifiedName}" }
+                .filterValues { it.size > 1 }
+                .keys
+        val duplicateFunctionTargets =
+            targets
+                .mapNotNull { it.function }
+                .groupingBy { it }
+                .eachCount()
+                .filterValues { it > 1 }
+                .keys
+        val fileOperationConflictPaths =
+            patch.replacements
+                .groupBy { runCatching { PathSafety.normalizeRelative(it.path) }.getOrDefault(it.path) }
+                .filterValues { requests -> requests.size > 1 && requests.any { it.operation.endsWith("_file") } }
+                .keys
+        val fileOperationConflictFiles =
+            targets
+                .groupBy { target ->
+                    target.file?.virtualFile
+                        ?: target.function?.containingFile?.virtualFile
+                        ?: target.insertionParent?.containingFile?.virtualFile
+                }.filter { (file, groupedTargets) ->
+                    file != null &&
+                        groupedTargets.size > 1 &&
+                        groupedTargets.any {
+                            it.validated.request.operation
+                                .endsWith("_file")
+                        }
+                }.keys
         val adjusted =
             targets.map { target ->
-                if (target.function in
-                    overlapping
-                ) {
+                val request = target.validated.request
+                val normalizedPath = runCatching { PathSafety.normalizeRelative(request.path) }.getOrDefault(request.path)
+                val duplicateKey = "$normalizedPath::${request.qualifiedName}"
+                val structuralConflictMessage =
+                    when {
+                        duplicateKey in duplicateTargetKeys || target.function in duplicateFunctionTargets ->
+                            "Duplicate operations for the same patch target are not allowed."
+                        normalizedPath in fileOperationConflictPaths ||
+                            target.file?.virtualFile in fileOperationConflictFiles ||
+                            target.function?.containingFile?.virtualFile in fileOperationConflictFiles ||
+                            target.insertionParent?.containingFile?.virtualFile in fileOperationConflictFiles ->
+                            "A whole-file operation cannot be combined with another operation for the same file."
+                        target.function in overlapping -> "Overlapping parent/nested replacements are not allowed in one patch."
+                        else -> null
+                    }
+                if (structuralConflictMessage != null) {
                     Target(
                         invalid(
-                            target.validated.request,
+                            request,
                             ReplacementStatus.INVALID,
-                            "Overlapping parent/nested replacements are not allowed in one patch.",
+                            structuralConflictMessage,
                         ),
                         null,
                         null,
@@ -190,7 +234,7 @@ class PatchValidator(
         request: FunctionReplacement,
         file: PyFile,
     ): Target {
-        val currentHash = FileContentHasher.hash(file.text)
+        val currentHash = FileContentHasher.hash(file)
         val status = if (currentHash == request.originalHash) ReplacementStatus.MATCH else ReplacementStatus.CHANGED
         val message =
             if (status == ReplacementStatus.MATCH) {

@@ -152,6 +152,28 @@ class PatchValidationEdgeCaseTest : BasePlatformTestCase() {
         assertTrue(result.targets.all { it.validated.message.contains("Overlapping") })
     }
 
+    fun testRejectsDuplicateTargetAndWholeFileOperationMixedWithFunctionEdit() {
+        val file = pyFile("mixed.py", "def run():\n    return 1\n")
+        val replacement = request(file, "run", "def run():\n    return 2\n")
+        val deletion =
+            FunctionReplacement(
+                "delete_file",
+                "mixed.py",
+                FILE_OPERATION_QUALIFIED_NAME,
+                FileContentHasher.hash(file),
+                null,
+                null,
+            )
+
+        val duplicateResult = validator(file).validate(patch(replacement, replacement.copy(replacement = "def run():\n    return 3\n")))
+        assertEquals(listOf(ReplacementStatus.INVALID, ReplacementStatus.INVALID), duplicateResult.targets.map { it.validated.status })
+        assertTrue(duplicateResult.targets.all { it.validated.message.contains("Duplicate operations") })
+
+        val mixedResult = validator(file).validate(patch(replacement, deletion))
+        assertEquals(listOf(ReplacementStatus.INVALID, ReplacementStatus.INVALID), mixedResult.targets.map { it.validated.status })
+        assertTrue(mixedResult.targets.all { it.validated.message.contains("whole-file operation") })
+    }
+
     fun testNewNestedFunctionUsesUnambiguousParentAndAnchor() {
         val file =
             pyFile(
@@ -180,6 +202,43 @@ class PatchValidationEdgeCaseTest : BasePlatformTestCase() {
         val result = PythonFunctionReplacementService(project).apply(validation, setOf("nested_add.py::outer.created"), emptySet())
         assertEquals(listOf("nested_add.py:outer.created"), result.applied)
         assertSize(1, PythonFunctionLocator.find(file, "outer.created"))
+    }
+
+    fun testAddsDecoratedAsyncMethodAndPreservesItsCompleteKind() {
+        val file =
+            pyFile(
+                "complex_add.py",
+                "class Client:\n    def existing(self):\n        return 1\n",
+            )
+        val addition =
+            FunctionReplacement(
+                "add_function",
+                "complex_add.py",
+                "Client.fetch",
+                null,
+                "@staticmethod\nasync def fetch(value: int) -> int:\n    '''Fetch a value.'''\n    return value\n",
+                null,
+                parentQualifiedName = "Client",
+                insertAfterQualifiedName = "Client.existing",
+            )
+        val validation = validate(file, addition)
+
+        assertEquals(
+            ReplacementStatus.NEW,
+            validation.targets
+                .single()
+                .validated.status,
+        )
+        val result = PythonFunctionReplacementService(project).apply(validation, setOf("complex_add.py::Client.fetch"), emptySet())
+
+        assertEquals(listOf("complex_add.py:Client.fetch"), result.applied)
+        val inserted = PythonFunctionLocator.find(file, "Client.fetch").single()
+        assertTrue(inserted.text.contains("@staticmethod"))
+        assertTrue(
+            nl.ferron.copilotcontextbridge.analysis.SymbolIndexer
+                .isAsync(inserted),
+        )
+        assertTrue(inserted.text.contains("'''Fetch a value.'''") && inserted.text.contains("return value"))
     }
 
     private fun pyFile(

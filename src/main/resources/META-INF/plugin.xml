@@ -62,7 +62,7 @@
         <action id="CopilotContextBridge.AddRepositoryStructure"
                 class="nl.ferron.copilotcontextbridge.actions.AddRepositoryStructureAction"
                 text="Add Repository Structure"/>
-        <group id="CopilotContextBridge.ProjectViewGroup" text="Copilot Context Bridge" popup="false">
+        <group id="CopilotContextBridge.ProjectViewGroup" text="Copilot Context Bridge" popup="true">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
             <reference ref="CopilotContextBridge.Add"/>
             <reference ref="CopilotContextBridge.AddWithDependencies"/>

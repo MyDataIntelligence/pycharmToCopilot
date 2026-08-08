@@ -2,6 +2,21 @@ package nl.ferron.copilotcontextbridge.settings
 
 /** Pure editing operations shared by the policy dialog and regression tests. */
 object ContextPolicyEditor {
+    fun replaceWith(
+        target: ContextPolicyState,
+        source: ContextPolicyState,
+    ) {
+        target.id = source.id
+        target.version = source.version
+        target.target = source.target
+        target.returnMode = source.returnMode
+        target.previousBatchMode = source.previousBatchMode
+        target.maxRepositoryFiles = source.maxRepositoryFiles
+        target.maxAttachments = source.maxAttachments
+        target.bundleAutomaticContext = source.bundleAutomaticContext
+        target.rules = source.rules.map(ContextRuleState::copyOf).toMutableList()
+    }
+
     fun resetToPromptDefault(
         policy: ContextPolicyState,
         promptId: String,

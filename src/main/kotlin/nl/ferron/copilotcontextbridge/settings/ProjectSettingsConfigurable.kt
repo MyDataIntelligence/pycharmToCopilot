@@ -34,7 +34,6 @@ class ProjectSettingsConfigurable(
     private val mermaid = JBCheckBox("Generate Mermaid dependency map")
     private val absolutePath = JBCheckBox("Include absolute repository path")
     private val previous = JBCheckBox("Avoid files already prepared in earlier batches")
-    private val clear = JBCheckBox("Clear active selection after preparing a batch")
     private val openOnStartup = JBCheckBox("Open the Bridge when a project starts")
     private val detectSecrets = JBCheckBox("Detect likely secrets")
     private val blockSecrets = JBCheckBox("Block likely secrets by default")
@@ -73,7 +72,6 @@ class ProjectSettingsConfigurable(
                         mermaid,
                         absolutePath,
                         previous,
-                        clear,
                         openOnStartup,
                         row("Maximum text scan size (KiB)", scanLimitKiB),
                     ),
@@ -119,7 +117,6 @@ class ProjectSettingsConfigurable(
             generateMermaid = mermaid.isSelected
             includeAbsoluteRepositoryPath = absolutePath.isSelected
             avoidPreviouslySentFiles = previous.isSelected
-            clearActiveSelectionAfterExport = clear.isSelected
             openToolWindowOnStartup = openOnStartup.isSelected
             detectLikelySecrets = detectSecrets.isSelected
             blockLikelySecrets = blockSecrets.isSelected
@@ -147,7 +144,6 @@ class ProjectSettingsConfigurable(
         mermaid.isSelected = state.generateMermaid
         absolutePath.isSelected = state.includeAbsoluteRepositoryPath
         previous.isSelected = state.avoidPreviouslySentFiles
-        clear.isSelected = state.clearActiveSelectionAfterExport
         openOnStartup.isSelected = state.openToolWindowOnStartup
         detectSecrets.isSelected = state.detectLikelySecrets
         blockSecrets.isSelected = state.blockLikelySecrets
@@ -174,7 +170,6 @@ class ProjectSettingsConfigurable(
             mermaid.isSelected,
             absolutePath.isSelected,
             previous.isSelected,
-            clear.isSelected,
             openOnStartup.isSelected,
             detectSecrets.isSelected,
             blockSecrets.isSelected,
@@ -201,7 +196,6 @@ class ProjectSettingsConfigurable(
             state.generateMermaid,
             state.includeAbsoluteRepositoryPath,
             state.avoidPreviouslySentFiles,
-            state.clearActiveSelectionAfterExport,
             state.openToolWindowOnStartup,
             state.detectLikelySecrets,
             state.blockLikelySecrets,

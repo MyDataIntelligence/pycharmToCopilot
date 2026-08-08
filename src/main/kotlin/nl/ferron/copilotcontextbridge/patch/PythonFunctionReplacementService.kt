@@ -7,6 +7,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.jetbrains.python.psi.PyClass
@@ -30,10 +31,18 @@ class PythonFunctionReplacementService(
         selectedNames: Set<String>,
         forcedNames: Set<String>,
     ): ApplyResult {
+        if (!validation.validation.valid) {
+            return ApplyResult(
+                applied = emptyList(),
+                skipped = emptyList(),
+                failures = listOf("Patch validation failed; no project files were modified."),
+            )
+        }
         val applied = mutableListOf<String>()
         val skipped = mutableListOf<String>()
         val failures = mutableListOf<String>()
         val affectedFiles = linkedSetOf<PsiFile>()
+        val lastInsertionByAnchor = mutableMapOf<PsiElement, PsiElement>()
         val settings = project.getService(ProjectSettings::class.java).state
         val eligible =
             validation.targets.filter { target ->
@@ -76,10 +85,11 @@ class PythonFunctionReplacementService(
                                 is PyFunction -> parent.statementList
                                 else -> error("Unsupported insertion parent.")
                             }
-                        if (target.insertionAnchor !=
-                            null
-                        ) {
-                            container.addAfter(target.parsed!!, target.insertionAnchor)
+                        if (target.insertionAnchor != null) {
+                            val effectiveAnchor = lastInsertionByAnchor[target.insertionAnchor] ?: target.insertionAnchor
+                            container.addAfter(target.parsed!!, effectiveAnchor).also {
+                                lastInsertionByAnchor[target.insertionAnchor] = it
+                            }
                         } else {
                             container.add(target.parsed!!)
                         }
