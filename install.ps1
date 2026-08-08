@@ -39,7 +39,9 @@ if (-not $env:JAVA_HOME) {
 
 Push-Location $repoRoot
 try {
-    & "$repoRoot\gradlew.bat" buildPlugin "-PccbBuildDir=$externalBuild" --no-daemon
+    # Clean the isolated build directory first so an installer run can never
+    # retain stale Kotlin classes from an older checkout or plugin version.
+    & "$repoRoot\gradlew.bat" clean buildPlugin "-PccbBuildDir=$externalBuild" --no-daemon
     if ($LASTEXITCODE -ne 0) { throw 'Plugin build failed; installation was not changed.' }
 } finally {
     Pop-Location
