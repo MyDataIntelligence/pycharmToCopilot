@@ -17,9 +17,9 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 ## ZIP and installer result
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
-- Current release15 ZIP produced by `buildPlugin`: 819276 bytes, SHA-256 `2C7C48C890B7AD8D9CE616D5F7828E771E556749BEA9420256597ED6EAAD8AC4`.
+- Current release15 ZIP produced by `buildPlugin`: 819367 bytes, SHA-256 `2C7C48C890B7AD8D9CE616D5F7828E771E556749BEA9420256597ED6EAAD8AC4`.
 - Final verification ZIP: `build-final-release15/distributions/copilot-context-bridge-1.0.0.zip`.
-- Final verification size: 819276 bytes.
+- Final verification size: 819367 bytes.
 - Final verification SHA-256: `2C7C48C890B7AD8D9CE616D5F7828E771E556749BEA9420256597ED6EAAD8AC4`.
 - The ZIP includes the compact Batch dropdown renderer, wrapped Context Files details and their regression tests.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
