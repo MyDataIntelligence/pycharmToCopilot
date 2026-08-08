@@ -7,9 +7,9 @@ This record separates verified automated/install evidence from the still-pending
 - Gradle: 9.5.0.
 - Kotlin: 2.3.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
-- Command: `.\gradlew.bat test ktlintCheck -PccbBuildDir=build-final-gate5 --no-daemon`.
+- Command: `.\gradlew.bat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-audit --no-daemon`.
 - Result: `BUILD SUCCESSFUL`; 50 suites and 188 tests, 0 failures, 0 errors and 0 skipped tests.
-- Plugin build/verifier command: `.\gradlew.bat buildPlugin verifyPlugin -PccbBuildDir=build-release-final2 --no-daemon`.
+- The same final-audit command rebuilt the ZIP and ran the verifier.
 - Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
 
 The Gradle launcher itself used the locally installed JDK 17. Gradle selected the configured JDK 21 toolchain for plugin compilation.
@@ -41,7 +41,7 @@ PyCharm 2026.2.0.1 was launched with this repository after the final install. It
 - the project-scoped open-on-startup activity with `enabled=true`;
 - no `PluginException`, `ClassNotFoundException`, `NoClassDefFoundError` or plugin `ERROR` after that startup.
 
-The reviewed full-window screenshot [`L139-final-installed.png`](screenshots/live-audit/L139-final-installed.png) shows the installed tool window with Batch/Import/Preview/More navigation, the persistent session selector, compact Pinned dropdown, ZIP drop zone and green Prepare action. This proves installation and the primary layout, but not every interactive behavior in the live matrix.
+The reviewed full-window screenshots [`L139-final-installed.png`](screenshots/live-audit/L139-final-installed.png) and [`L144-current-final.png`](screenshots/live-audit/L144-current-final.png) show the installed tool window with Batch/Import/Preview/More navigation, the persistent session selector, compact Pinned dropdown, ZIP drop zone, green Prepare action and the prompt card below the drag zone. These prove installation and the primary layout, but not every interactive behavior in the live matrix.
 
 ## Visual acceptance status
 
