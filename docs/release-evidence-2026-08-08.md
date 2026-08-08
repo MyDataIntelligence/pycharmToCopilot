@@ -7,7 +7,7 @@ This record separates verified automated/install evidence from the still-pending
 - Gradle: 9.5.0.
 - Kotlin: 2.1.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
-- Command: `.\gradlew.bat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release5 --no-daemon`.
+- Command: `.\gradlew.bat clean test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-release6 --no-daemon`.
 - Result: `BUILD SUCCESSFUL`; 51 suites and 191 tests, 0 failures, 0 errors and 0 skipped tests.
 - The same final-audit command rebuilt the ZIP and ran the verifier.
 - Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
@@ -18,7 +18,7 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
 - Repository copy produced by the final `install.ps1`: 808536 bytes, SHA-256 `E9B92D1497987B8957B7EDF1283AD41333FF4B2F6DFCC38F440083938FE7E0AC`.
-- Final verification ZIP: `build-final-release5/distributions/copilot-context-bridge-1.0.0.zip`.
+- Final verification ZIP: `build-final-release6/distributions/copilot-context-bridge-1.0.0.zip`.
 - Final verification size: 808536 bytes.
 - Final verification SHA-256: `E9B92D1497987B8957B7EDF1283AD41333FF4B2F6DFCC38F440083938FE7E0AC`.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
