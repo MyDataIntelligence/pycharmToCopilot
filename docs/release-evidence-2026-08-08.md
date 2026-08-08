@@ -26,6 +26,7 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 - `install.ps1 -BuildOnly` was run successfully after release23; it produced a fresh ZIP and copied it to `build/distributions`.
 - The installer now runs `clean buildPlugin` in its isolated build directory before packaging, preventing stale Kotlin classes from leaking into a later install.
 - A full `install.ps1` run after release23 completed successfully after closing the controlled test instance and atomically installed `%APPDATA%/JetBrains/PyCharm2026.2/plugins/copilot-context-bridge`.
+- Fresh-clone check: a depth-1 clone of `origin/main` ran `install.ps1 -BuildOnly` from the cloned repository and exited 0, producing `build/distributions/copilot-context-bridge-1.0.0.zip` without relying on repository-local generated files.
 - The previous installed version was backed up outside the IDE plugin directory under `%LOCALAPPDATA%/CopilotContextBridge/plugin-backups/PyCharm2026.2`.
 - The restarted PyCharm 2026.2 instance loaded `Copilot Context Bridge (1.0.0)` and the live Batch/Preview/More views were observed without plugin class-loading errors.
 - Exactly one installed directory contains `copilot-context-bridge-1.0.0.jar`.
