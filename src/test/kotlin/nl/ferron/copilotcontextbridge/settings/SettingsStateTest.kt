@@ -46,6 +46,7 @@ class SettingsStateTest : TestCase() {
         assertEquals(Defaults.RETURN_FILE_INSTRUCTION, service.state.returnFileInstruction)
         assertEquals(Defaults.COMBINED_TEXT_INTRO, service.state.combinedTextIntro)
         assertEquals(Defaults.KICKOFF_PROMPT_TEMPLATE, service.state.kickoffPromptTemplate)
+        assertEquals(Defaults.excludedContextExtensions, service.state.excludedContextExtensions)
         assertEquals(1, service.state.stagingRetentionDays)
     }
 }

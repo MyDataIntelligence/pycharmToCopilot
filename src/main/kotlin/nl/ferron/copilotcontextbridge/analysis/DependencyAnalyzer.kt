@@ -179,7 +179,10 @@ class DependencyAnalyzer(
                 warnings += "Pinned path no longer exists: $relative"
                 return@forEach
             }
-            if (!TextFileSupport.isLikelyText(entry.path)) {
+            val extension = entry.relativePath.substringAfterLast('.', "").lowercase()
+            if (extension in app.excludedContextExtensions.map { it.removePrefix(".").lowercase() } ||
+                !TextFileSupport.isLikelyText(entry.path)
+            ) {
                 candidates +=
                     baseCandidate(
                         entry,

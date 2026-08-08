@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="nl.ferron.copilotcontextbridge.staging.CombinedContextTextBuilderTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:37.582Z" hostname="FERRON" time="0.018">
-  <properties/>
-  <testcase name="includesMetadataPathsAndExactTextContent" classname="nl.ferron.copilotcontextbridge.staging.CombinedContextTextBuilderTest" time="0.012"/>
-  <testcase name="placesKickoffPromptBeforeFileContents" classname="nl.ferron.copilotcontextbridge.staging.CombinedContextTextBuilderTest" time="0.005"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

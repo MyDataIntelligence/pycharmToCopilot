@@ -65,6 +65,7 @@ import javax.swing.JProgressBar
 import javax.swing.JSplitPane
 import javax.swing.JToggleButton
 import javax.swing.SwingConstants
+import javax.swing.SwingUtilities
 import javax.swing.Timer
 import javax.swing.TransferHandler
 import javax.swing.UIManager
@@ -91,19 +92,16 @@ class CopilotContextPanel(
         JProgressBar().apply {
             preferredSize = Dimension(JBUI.scale(160), JBUI.scale(10))
         }
-    private val batchFileCategory = JComboBox<BatchFileCategoryChoice>()
+
+    /** Compact selector: the closed value is the category; the popup contains every file in that category. */
+    private val batchFileCategory = JComboBox<BatchFileDropdownItem>()
     private val batchFiles = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
-    private val batchFilesScroll =
-        JBScrollPane(batchFiles).apply {
-            horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
-            verticalScrollBarPolicy = JBScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
-            preferredSize = Dimension(JBUI.scale(360), JBUI.scale(150))
-            minimumSize = Dimension(0, JBUI.scale(110))
-        }
     private val preview = JBTextArea().apply { isEditable = false }
     private val historyText = JBTextArea().apply { isEditable = false }
     private val skillCombo = JComboBox<PromptSkillChoice>()
     private val batchCombo = JComboBox<String>()
+    private val sessionCombo = JComboBox<SessionChoice>()
+    private var refreshingSessions = false
     private val dragLabel = JLabel("Drag becomes available after preparation", AllIcons.Actions.Upload, SwingConstants.CENTER)
     private val kickoffPrompt =
         JBTextArea(5, 36).apply {
@@ -214,8 +212,25 @@ class CopilotContextPanel(
         }
         batchFileCategory.addActionListener {
             if (refreshingBatchCategory) return@addActionListener
-            selectedBatchCategory = (batchFileCategory.selectedItem as? BatchFileCategoryChoice)?.category
-            renderSelectedBatchCategory()
+            val item = batchFileCategory.selectedItem as? BatchFileDropdownItem ?: return@addActionListener
+            // File rows are read-only inspection entries. Restore the compact category label after a click.
+            if (!item.isCategory) {
+                val category = item.category
+                SwingUtilities.invokeLater {
+                    refreshingBatchCategory = true
+                    try {
+                        selectedBatchCategory = category
+                        refreshBatchFileCategories()
+                    } finally {
+                        refreshingBatchCategory = false
+                    }
+                }
+            } else {
+                selectedBatchCategory = item.category
+                // Rebuild the popup so the newly selected category becomes the closed value and its
+                // complete file set is immediately available on the next open.
+                refreshBatchFileCategories()
+            }
         }
         batchCombo.addActionListener {
             if (!refreshingHistory) showSelectedBatchDetails()
@@ -282,12 +297,14 @@ class CopilotContextPanel(
             add(
                 JPanel(GridLayout(1, 4, 6, 0)).apply {
                     isOpaque = false
-                    add(batchNavigation)
-                    add(importNavigation)
-                    add(previewNavigation)
-                    add(moreNavigation)
+                    listOf(batchNavigation, importNavigation, previewNavigation, moreNavigation).forEach { button ->
+                        // GridLayout must be allowed to shrink each button equally in narrow tool windows;
+                        // otherwise the final More button is clipped beside the settings/details area.
+                        button.minimumSize = Dimension(0, button.minimumSize.height)
+                        add(button)
+                    }
                 },
-                BorderLayout.WEST,
+                BorderLayout.CENTER,
             )
             add(
                 JButton(AllIcons.General.GearPlain).apply {
@@ -301,6 +318,22 @@ class CopilotContextPanel(
     private fun createWorkflow() =
         verticalPanel().apply {
             border = JBUI.Borders.empty(2, 4, 10, 7)
+            add(
+                JPanel(BorderLayout(6, 0)).apply {
+                    add(JLabel("Session"), BorderLayout.WEST)
+                    sessionCombo.toolTipText = "Switch between saved Copilot conversation sessions"
+                    sessionCombo.addActionListener {
+                        if (!refreshingSessions) {
+                            (sessionCombo.selectedItem as? SessionChoice)?.let { choice ->
+                                if (selectionService.switchConversationSession(choice.id)) recalculate()
+                            }
+                        }
+                    }
+                    add(sessionCombo, BorderLayout.CENTER)
+                    add(JButton("New session").apply { addActionListener { startNewSession() } }, BorderLayout.EAST)
+                },
+            )
+            add(Box.createVerticalStrut(JBUI.scale(6)))
             add(JBLabel("Prepare code for Copilot").apply { font = font.deriveFont(Font.BOLD, font.size2D + 3f) })
             add(JBLabel("Build one safe batch, then copy or drag it.").apply { foreground = JBColor.GRAY })
             add(Box.createVerticalStrut(JBUI.scale(7)))
@@ -472,8 +505,9 @@ class CopilotContextPanel(
                 },
                 BorderLayout.NORTH,
             )
-            add(batchFilesScroll, BorderLayout.CENTER)
-            maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(205))
+            // The selector popup owns the file rows. Keeping the page itself compact means the complete
+            // three-step batch flow fits without a second vertical scrollbar.
+            maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(58))
         }
 
     private fun createKickoffPromptPanel() =
@@ -907,14 +941,24 @@ class CopilotContextPanel(
         val pinnedCount = pinnedCandidates.size + invalidCount
         val previous = selectedBatchCategory
         selectedBatchCategory = BatchFileCategoryModel.selectedCategory(previous, pinnedCount, automaticCandidates.size)
+        val category = selectedBatchCategory ?: BatchFileCategory.PINNED
         refreshingBatchCategory = true
         try {
             batchFileCategory.removeAllItems()
-            BatchFileCategoryModel.choices(pinnedCount, automaticCandidates.size).forEach(batchFileCategory::addItem)
-            batchFileCategory.selectedItem =
-                (0 until batchFileCategory.itemCount)
-                    .map(batchFileCategory::getItemAt)
-                    .firstOrNull { it.category == selectedBatchCategory }
+            BatchFileCategoryModel
+                .dropdownItems(
+                    category,
+                    pinnedCandidates,
+                    automaticCandidates,
+                    selectionService.invalidPinnedPaths(),
+                ).forEach { item -> batchFileCategory.addItem(item) }
+            batchFileCategory.selectedIndex = 0
+            // A category row is rendered as the closed value; the popup includes both category switching
+            // and every full repository-relative path in the active category.
+            batchFileCategory.toolTipText =
+                "Open to inspect all " +
+                "${if (selectedBatchCategory == BatchFileCategory.PINNED) pinnedCount else automaticCandidates.size} files; " +
+                "each row shows its relationship reason."
         } finally {
             refreshingBatchCategory = false
         }
@@ -929,7 +973,6 @@ class CopilotContextPanel(
                 renderInvalidPinnedPaths(batchFiles)
             }
         }
-        batchFilesScroll.verticalScrollBar.value = 0
     }
 
     private fun renderInvalidPinnedPaths(panel: JPanel) {
@@ -1339,6 +1382,7 @@ class CopilotContextPanel(
     }
 
     private fun refreshHistory() {
+        refreshSessions()
         val selected = selectedBatchId()
         val batches = selectionService.batches().asReversed()
         refreshingHistory = true
@@ -1351,6 +1395,30 @@ class CopilotContextPanel(
             refreshingHistory = false
         }
         showSelectedBatchDetails()
+    }
+
+    private fun refreshSessions() {
+        val active = selectionService.activeConversationSessionId()
+        val summaries = selectionService.conversationSessions()
+        val ids = (summaries.map { it.id } + active).distinct()
+        refreshingSessions = true
+        try {
+            sessionCombo.removeAllItems()
+            ids.forEach { id ->
+                val summary = summaries.firstOrNull { it.id == id }
+                sessionCombo.addItem(SessionChoice(id, summary?.batchCount ?: 0))
+            }
+            sessionCombo.selectedIndex = ids.indexOf(active).coerceAtLeast(0)
+        } finally {
+            refreshingSessions = false
+        }
+    }
+
+    private data class SessionChoice(
+        val id: String,
+        val batchCount: Int,
+    ) {
+        override fun toString(): String = "${id.take(8)} · $batchCount batch${if (batchCount == 1) "" else "es"}"
     }
 
     private fun showSelectedBatchDetails() {

@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="nl.ferron.copilotcontextbridge.ui.StableDetailTabsTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:38.641Z" hostname="FERRON" time="0.003">
-  <properties/>
-  <testcase name="testMoreNavigationUsesStableCardsWithoutAVisibleTabStrip" classname="nl.ferron.copilotcontextbridge.ui.StableDetailTabsTest" time="0.003"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

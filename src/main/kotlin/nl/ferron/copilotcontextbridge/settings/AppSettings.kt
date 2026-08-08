@@ -54,6 +54,8 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
 
         @JvmField var secretFilenamePatterns: MutableList<String> = Defaults.secretPatterns.toMutableList()
 
+        @JvmField var excludedContextExtensions: MutableList<String> = Defaults.excludedContextExtensions.toMutableList()
+
         @JvmField var stagingRetentionDays: Int = 7
 
         @JvmField var returnFileInstruction: String = Defaults.RETURN_FILE_INSTRUCTION
@@ -115,6 +117,7 @@ class AppSettings : PersistentStateComponent<AppSettings.Data> {
         }
         if (data.ignorePatterns.isEmpty()) data.ignorePatterns.addAll(Defaults.ignorePatterns)
         if (data.secretFilenamePatterns.isEmpty()) data.secretFilenamePatterns.addAll(Defaults.secretPatterns)
+        if (data.excludedContextExtensions.isEmpty()) data.excludedContextExtensions.addAll(Defaults.excludedContextExtensions)
         data.stagingRetentionDays = data.stagingRetentionDays.coerceIn(1, 365)
     }
 

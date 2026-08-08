@@ -3,6 +3,9 @@
 .kotlin/
 .idea/
 build/
+build-*/
+.gradle-agent-context/
+build-agent-*/
 out/
 *.iml
 .tooling/

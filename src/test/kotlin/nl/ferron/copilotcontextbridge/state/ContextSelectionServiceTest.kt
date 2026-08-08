@@ -116,6 +116,22 @@ class ContextSelectionServiceTest : BasePlatformTestCase() {
         assertEquals(listOf("batch-2"), service.currentSessionBatches().map { it.sessionId })
     }
 
+    fun testConversationSessionsCanBeSwitchedFromHistory() {
+        val service = project.getService(ContextSelectionService::class.java)
+        service.loadState(ContextSelectionService.Data())
+        val first = service.activeConversationSessionId()
+        service.markExported("batch-1", "General change", listOf("src/first.py"), false)
+        service.startNewSession()
+        val second = service.activeConversationSessionId()
+        service.markExported("batch-2", "Fix issue", listOf("src/second.py"), false)
+
+        assertEquals(setOf(first, second), service.conversationSessions().map { it.id }.toSet())
+        assertTrue(service.switchConversationSession(first))
+        assertEquals(first, service.activeConversationSessionId())
+        assertEquals(listOf("batch-1"), service.currentSessionBatches().map { it.sessionId })
+        assertFalse(service.switchConversationSession("missing-session"))
+    }
+
     fun testExclusionScopesHaveDistinctLifetimesAndIncludeOnceOverridesThem() {
         val service = project.getService(ContextSelectionService::class.java)
         service.loadState(ContextSelectionService.Data())

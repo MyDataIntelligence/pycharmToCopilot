@@ -1,8 +1,13 @@
 package nl.ferron.copilotcontextbridge.ui
 
 import junit.framework.TestCase
+import nl.ferron.copilotcontextbridge.model.ContextCandidate
+import nl.ferron.copilotcontextbridge.model.DependencyRelation
+import nl.ferron.copilotcontextbridge.model.RelationConfidence
+import nl.ferron.copilotcontextbridge.model.RelationType
 import nl.ferron.copilotcontextbridge.settings.AppSettings
 import nl.ferron.copilotcontextbridge.settings.Defaults
+import java.nio.file.Paths
 
 class BatchWorkflowModelsTest : TestCase() {
     fun testDropdownKeepsPreviousNonEmptyCategory() {
@@ -33,5 +38,37 @@ class BatchWorkflowModelsTest : TestCase() {
         assertTrue(prompt.contains("batch 3 in session session-abc"))
         assertTrue(prompt.contains("More batches may follow"))
         assertTrue(prompt.contains("Wait until I confirm"))
+    }
+
+    fun testDropdownContainsEveryFileAndFullReasonWithoutMoreRow() {
+        val candidate =
+            ContextCandidate(
+                relativePath = "src/functions/livy.py",
+                absolutePath = Paths.get("src/functions/livy.py"),
+                score = 800,
+                depth = 1,
+                confidence = RelationConfidence.CONFIRMED,
+                relations =
+                    listOf(
+                        DependencyRelation(
+                            "src/main.py",
+                            "src/functions/livy.py",
+                            RelationType.DIRECT_IMPORT,
+                            RelationConfidence.CONFIRMED,
+                        ),
+                    ),
+            )
+        val items =
+            BatchFileCategoryModel.dropdownItems(
+                BatchFileCategory.AUTOMATIC,
+                emptyList(),
+                listOf(candidate),
+            )
+        assertEquals(3, items.size)
+        assertEquals("Automatic (1)", items.first().toString())
+        assertEquals("Pinned (0)", items[1].toString())
+        assertTrue(items[2].toString().contains("src/functions/livy.py"))
+        assertTrue(items[2].toString().contains("direct import"))
+        assertFalse(items.any { it.toString().contains("more") })
     }
 }

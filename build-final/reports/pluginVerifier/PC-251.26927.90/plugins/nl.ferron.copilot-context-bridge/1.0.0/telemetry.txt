@@ -1,9 +1,0 @@
-Plugin ID: nl.ferron.copilot-context-bridge
-Plugin Version: 1.0.0
-Descriptor parsed in: 713 ms
-Descriptor parsed (raw ms): 713
-Plugin size (bytes): 780215
-Verified classes in plugin artifact: 259
-Verification time: 45 s 484 ms
-Verification time (raw ms): 45484
-

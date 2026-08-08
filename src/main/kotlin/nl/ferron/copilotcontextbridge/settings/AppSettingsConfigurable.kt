@@ -23,6 +23,7 @@ class AppSettingsConfigurable : Configurable {
     private val kickoffPromptTemplate = JBTextArea(12, 80)
     private val ignorePatterns = JBTextArea(18, 70)
     private val secretPatterns = JBTextArea(18, 70)
+    private val excludedExtensions = JBTextArea(12, 70)
     private val retention = JSpinner(SpinnerNumberModel(7, 1, 365, 1))
 
     override fun getDisplayName() = "Copilot Context Bridge"
@@ -49,6 +50,10 @@ class AppSettingsConfigurable : Configurable {
             addTab("Global guidelines", editor("Global guidelines (Markdown)", guidelines))
             addTab("Repository ignores", editor("Global ignore patterns (one per line)", ignorePatterns))
             addTab("Secret filenames", editor("Likely-secret filename patterns (one per line)", secretPatterns))
+            addTab(
+                "Context exclusions",
+                editor("File extensions excluded from context attachments (one per line, with or without a dot)", excludedExtensions),
+            )
             reset()
         }
 
@@ -61,6 +66,7 @@ class AppSettingsConfigurable : Configurable {
             kickoffPromptTemplate.text != state.kickoffPromptTemplate ||
             lines(ignorePatterns.text) != state.ignorePatterns ||
             lines(secretPatterns.text) != state.secretFilenamePatterns ||
+            normalizedExtensions(excludedExtensions.text) != state.excludedContextExtensions ||
             retention.value != state.stagingRetentionDays
     }
 
@@ -71,8 +77,10 @@ class AppSettingsConfigurable : Configurable {
         if (kickoffErrors.isNotEmpty()) throw ConfigurationException(kickoffErrors.joinToString("\n"))
         val ignores = lines(ignorePatterns.text)
         val secrets = lines(secretPatterns.text)
+        val excluded = normalizedExtensions(excludedExtensions.text)
         if (ignores.isEmpty()) throw ConfigurationException("At least one repository ignore pattern is required.")
         if (secrets.isEmpty()) throw ConfigurationException("At least one likely-secret filename pattern is required.")
+        if (excluded.isEmpty()) throw ConfigurationException("At least one context exclusion extension is required.")
         AppSettings.getInstance().state.apply {
             mandatoryFirstQuestion = question.text.trim()
             globalGuidelines = guidelines.text
@@ -82,6 +90,7 @@ class AppSettingsConfigurable : Configurable {
             kickoffPromptTemplate = this@AppSettingsConfigurable.kickoffPromptTemplate.text.trim()
             ignorePatterns = ignores.toMutableList()
             secretFilenamePatterns = secrets.toMutableList()
+            excludedContextExtensions = excluded.toMutableList()
             stagingRetentionDays = retention.value as Int
         }
     }
@@ -97,6 +106,7 @@ class AppSettingsConfigurable : Configurable {
         kickoffPromptTemplate.text = state.kickoffPromptTemplate
         ignorePatterns.text = state.ignorePatterns.joinToString("\n")
         secretPatterns.text = state.secretFilenamePatterns.joinToString("\n")
+        excludedExtensions.text = state.excludedContextExtensions.joinToString("\n")
         retention.value = state.stagingRetentionDays
     }
 
@@ -106,6 +116,8 @@ class AppSettingsConfigurable : Configurable {
             .map(String::trim)
             .filter(String::isNotBlank)
             .toList()
+
+    private fun normalizedExtensions(value: String): List<String> = lines(value).map { it.removePrefix(".").lowercase() }.distinct()
 
     private fun editor(
         title: String,

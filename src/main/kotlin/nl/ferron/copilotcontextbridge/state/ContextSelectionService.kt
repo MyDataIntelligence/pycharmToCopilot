@@ -59,6 +59,12 @@ class ContextSelectionService(
         @JvmField var nextBatchNumber: Int = 1
     }
 
+    data class ConversationSessionSummary(
+        val id: String,
+        val batchCount: Int,
+        val latestCreatedAt: String,
+    )
+
     private var data = Data()
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
 
@@ -254,6 +260,29 @@ class ContextSelectionService(
             }
 
     fun activeConversationSessionId(): String = data.activeConversationSessionId
+
+    fun conversationSessions(): List<ConversationSessionSummary> =
+        data.batches
+            .groupBy { it.conversationSessionId }
+            .map { (id, batches) ->
+                ConversationSessionSummary(id, batches.size, batches.maxOfOrNull { it.createdAt }.orEmpty())
+            }.sortedByDescending { it.latestCreatedAt }
+
+    fun switchConversationSession(sessionId: String): Boolean {
+        if (sessionId.isBlank() || sessionId == data.activeConversationSessionId) return false
+        if (sessionId !in data.batches.map { it.conversationSessionId }.toSet()) return false
+        data.activeConversationSessionId = sessionId
+        data.nextBatchNumber =
+            (data.batches.filter { it.conversationSessionId == sessionId }.maxOfOrNull { it.batchNumber } ?: 0) + 1
+        data.pinnedPaths.clear()
+        data.discoveryRoots.clear()
+        data.invalidPinnedPaths.clear()
+        data.excludedThisBatchPaths.clear()
+        data.includeOncePaths.clear()
+        data.excludedThisSessionPaths.clear()
+        fireChanged()
+        return true
+    }
 
     fun nextBatchNumber(): Int = data.nextBatchNumber
 

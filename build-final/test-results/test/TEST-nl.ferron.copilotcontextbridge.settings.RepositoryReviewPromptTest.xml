@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="nl.ferron.copilotcontextbridge.settings.RepositoryReviewPromptTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:37.563Z" hostname="FERRON" time="0.005">
-  <properties/>
-  <testcase name="settingsUpgradeMovesReviewAfterNewWorkflowsWithoutLosingCustomization" classname="nl.ferron.copilotcontextbridge.settings.RepositoryReviewPromptTest" time="0.002"/>
-  <testcase name="legacyReviewIsUpgradedButCustomizedReviewIsPreserved" classname="nl.ferron.copilotcontextbridge.settings.RepositoryReviewPromptTest" time="0.002"/>
-  <testcase name="reviewFollowsImplementationSkillsAndCoversReuseAndGuidelines" classname="nl.ferron.copilotcontextbridge.settings.RepositoryReviewPromptTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

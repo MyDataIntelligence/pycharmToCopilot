@@ -74,6 +74,36 @@ object Defaults {
             "service-account*",
         )
 
+    /** Extensions that should stay out of generated context attachments unless explicitly pinned. */
+    val excludedContextExtensions =
+        listOf(
+            "bin",
+            "class",
+            "jar",
+            "war",
+            "png",
+            "jpg",
+            "jpeg",
+            "gif",
+            "webp",
+            "ico",
+            "pdf",
+            "zip",
+            "7z",
+            "tar",
+            "gz",
+            "bz2",
+            "db",
+            "sqlite",
+            "sqlite3",
+            "parquet",
+            "feather",
+            "xlsx",
+            "xls",
+            "docx",
+            "pptx",
+        )
+
     val globalGuidelines =
         """
         # General approach

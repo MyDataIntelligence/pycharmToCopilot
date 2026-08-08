@@ -56,7 +56,7 @@ class ContextFilesPanel(
             val attachment = pack.attachmentPlan.repositoryToAttachment[candidate.sourceKey] ?: "not packed"
             candidateRow(
                 candidate,
-                "Included as ${if (candidate.pinned) "pinned" else primaryReason(candidate)} · attachment: $attachment",
+                "${ContextSelectionLabels.category(candidate)} · ${ContextSelectionLabels.detail(candidate)} · attachment: $attachment",
             )
         }
         replaceRows(

@@ -109,7 +109,7 @@ object ContextMarkdownRenderer {
                 appendLine("Paths from different repositories are independent even when their relative paths are identical.")
             }
             appendLine()
-            appendLine("### PINNED — kept as individual attachments")
+            appendLine("### MANUALLY SELECTED (PINNED) — selected by the user and kept as individual attachments")
             appendLine()
             input.selection.included.filter { it.pinned }.forEach { candidate ->
                 appendLine(
@@ -120,7 +120,9 @@ object ContextMarkdownRenderer {
             }
             if (input.selection.included.none { it.pinned }) appendLine("- None")
             appendLine()
-            appendLine("### AUTOMATIC — represented in generated bundles or separate policy-required attachments")
+            appendLine(
+                "### AUTOMATICALLY ADDED — selected by dependency/context analysis; represented in generated bundles or separate policy-required attachments",
+            )
             appendLine()
             input.selection.included.filterNot { it.pinned }.forEach { candidate ->
                 val reason = candidate.relations.joinToString(", ") { it.type.name.lowercase() }.ifBlank { "automatic context" }
@@ -140,7 +142,8 @@ object ContextMarkdownRenderer {
                 val relation = candidate.relations.joinToString(", ") { "${it.type} (${it.confidence})" }.ifBlank { "manual selection" }
                 appendLine(
                     "| `${input.stagedNames[candidate.sourceKey]}` | `${repositoryLabel(candidate, input.repositoryId)}` | " +
-                        "`${candidate.relativePath}` | ${if (candidate.pinned) "pinned" else "automatic"} | " +
+                        "`${candidate.relativePath}` | " +
+                        "${if (candidate.pinned) "manually selected (pinned)" else "automatically added"} | " +
                         "${candidate.depth} | $relation |",
                 )
             }

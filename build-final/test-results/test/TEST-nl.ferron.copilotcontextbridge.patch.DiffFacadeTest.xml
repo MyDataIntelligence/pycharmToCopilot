@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="nl.ferron.copilotcontextbridge.patch.DiffFacadeTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:32.070Z" hostname="FERRON" time="0.322">
-  <properties/>
-  <testcase name="testSafeFunctionUsesNativeTwoSideDiffWithSelectionActions" classname="nl.ferron.copilotcontextbridge.patch.DiffFacadeTest" time="0.166"/>
-  <testcase name="testHashConflictUsesNativeBaseCurrentProposedThreeWayDiff" classname="nl.ferron.copilotcontextbridge.patch.DiffFacadeTest" time="0.079"/>
-  <testcase name="testProposedResultUsesAnInMemoryEditableDocument" classname="nl.ferron.copilotcontextbridge.patch.DiffFacadeTest" time="0.077"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

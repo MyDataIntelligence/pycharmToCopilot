@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="nl.ferron.copilotcontextbridge.actions.ActionSupportTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-08T09:45:27.583Z" hostname="FERRON" time="0.004">
-  <properties/>
-  <testcase name="keepsEveryFileFromSingleAndMultiSelectionDataKeys" classname="nl.ferron.copilotcontextbridge.actions.ActionSupportTest" time="0.001"/>
-  <testcase name="acceptsVirtualFilesFromSelectedItemsFallback" classname="nl.ferron.copilotcontextbridge.actions.ActionSupportTest" time="0.001"/>
-  <testcase name="projectViewActionsAreGroupedInAVisibleBridgeSubmenu" classname="nl.ferron.copilotcontextbridge.actions.ActionSupportTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
