@@ -114,6 +114,8 @@ CI uses JDK 21, dependency caching, tests/static checks, Plugin Verifier and upl
 
 ## Security and honest limitations
 
+- Context generation is text-first: Python, Markdown, TXT, JSON, YAML/YML, TOML, SQL and other recognised text files are eligible. Binary/media/archive extensions are excluded by default and can be changed under Settings -> Context exclusions; explicit pinned files still require the normal safety checks.
+- The Batch tab has a persistent Session selector. Switching sessions restores that session's batches and clears only the active selection, so files from another conversation cannot leak into the current pack.
 - Likely secrets are never automatically selected; suspicious pinned files require explicit confirmation.
 - Absolute/traversal paths, ZIP escapes and repository symlink escapes are rejected; secret contents are never logged.
 - Swing-to-browser file drag varies by OS/browser. Opening the staging folder is the reliable fallback.

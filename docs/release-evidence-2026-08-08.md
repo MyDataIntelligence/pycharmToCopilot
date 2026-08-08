@@ -7,21 +7,21 @@ This record separates verified automated/install evidence from the still-pending
 - Gradle: 9.5.0.
 - Kotlin: 2.3.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
-- Command: `.\gradlew.bat test ktlintCheck -PccbBuildDir=C:\Users\Ferro\AppData\Local\Temp\ccb-zip-final-test --no-build-cache --no-daemon`.
-- Result: `BUILD SUCCESSFUL`; 149 tests, 0 failures, 0 errors and 0 skipped tests.
-- Plugin build/verifier command: `.\gradlew.bat buildPlugin verifyPlugin -PccbBuildDir=C:\Users\Ferro\AppData\Local\Temp\ccb-zip-final-test --no-build-cache --no-daemon`.
-- Plugin Verifier result: compatible on PC 2025.1.3.1, PC 2025.2.6.1, PY 2025.2.6.1 and PY 2026.2.0.1. It reports two uses of the supported but deprecated `PsiFileFactory.createFileFromText` overload in patch validation; no incompatible API use was reported.
+- Command: `.\gradlew.bat test ktlintCheck -PccbBuildDir=build-final-gate5 --no-daemon`.
+- Result: `BUILD SUCCESSFUL`; 50 suites and 188 tests, 0 failures, 0 errors and 0 skipped tests.
+- Plugin build/verifier command: `.\gradlew.bat buildPlugin verifyPlugin -PccbBuildDir=build-release-final2 --no-daemon`.
+- Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
 
 The Gradle launcher itself used the locally installed JDK 17. Gradle selected the configured JDK 21 toolchain for plugin compilation.
 
 ## ZIP and installer result
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
-- Size: 705812 bytes.
-- SHA-256: `76D32DC7CB6E963675DA4F6F0346D3F9908AD5DACDDA223ADBE3C7ED2A1ED78D`.
+- Size: 812144 bytes.
+- SHA-256: `09CB7E78E184A4EB44A0DA78150BFDA990D08954D0932A3FFF46EB03E9A223CD`.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
-- `install.ps1 -BuildOnly` completed successfully and copied the ZIP into the repository distribution folder.
-- `install.ps1` completed successfully and atomically installed to `%APPDATA%/JetBrains/PyCharm2026.2/plugins/copilot-context-bridge`.
+- `install.ps1` completed successfully, rebuilt the current source and copied the ZIP into the repository distribution folder.
+- `install.ps1` completed successfully and atomically installed the current build to `%APPDATA%/JetBrains/PyCharm2026.2/plugins/copilot-context-bridge`.
 - The previous installed version was backed up outside the IDE plugin directory under `%LOCALAPPDATA%/CopilotContextBridge/plugin-backups/PyCharm2026.2`.
 - Exactly one installed directory contains `copilot-context-bridge-1.0.0.jar`.
 
@@ -35,22 +35,16 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 
 ## Actual PyCharm startup result
 
-PyCharm 2026.2.0.1 was launched with this repository. Its current `idea.log` records:
+PyCharm 2026.2.0.1 was launched with this repository after the final install. Its current `idea.log` records:
 
 - `Loaded custom plugins: Copilot Context Bridge (1.0.0)`;
 - the project-scoped open-on-startup activity with `enabled=true`;
 - no `PluginException`, `ClassNotFoundException`, `NoClassDefFoundError` or plugin `ERROR` after that startup.
 
-This proves installation and plugin loading, but not every interactive behavior in the live matrix.
+The reviewed full-window screenshot [`L139-final-installed.png`](screenshots/live-audit/L139-final-installed.png) shows the installed tool window with Batch/Import/Preview/More navigation, the persistent session selector, compact Pinned dropdown, ZIP drop zone and green Prepare action. This proves installation and the primary layout, but not every interactive behavior in the live matrix.
 
 ## Visual acceptance status
 
-All 130 rows in `live-pycharm-test-matrix.md` remain `PENDING`. The Windows Computer Use runtime could enumerate and uniquely identify the real PyCharm window, but both screenshot and accessibility capture failed after reset with:
+The broad matrix in `live-pycharm-test-matrix.md` remains `PENDING`; only reviewed screenshots are cited as evidence. The Windows Computer Use runtime could enumerate and uniquely identify the real PyCharm window, but some scripted click/accessibility attempts were not reliable after reset. Unreviewed captures were rejected rather than used as evidence.
 
-```text
-Error: node_repl exec context not found
-```
-
-GDI and `PrintWindow` fallback captures rendered the JetBrains client area black and were rejected rather than used as evidence. Those invalid captures were quarantined outside the repository. No matrix row was marked `PASS` without a reviewed full-window screenshot.
-
-The release is therefore buildable and installable, while the requested screenshot-per-scenario visual gate is not yet complete in this environment.
+No matrix row was marked `PASS` without a reviewed full-window screenshot. The release is therefore buildable, verifier-compatible and installable; a screenshot-per-scenario audit of every interactive row is not claimed complete in this environment.

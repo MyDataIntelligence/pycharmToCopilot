@@ -89,6 +89,7 @@ class ContextSelectionServiceTest : BasePlatformTestCase() {
 
     fun testUnsafeRelativePathsAreNeverPersisted() {
         val service = project.getService(ContextSelectionService::class.java)
+        service.clear()
 
         service.addRelativePaths(listOf("../../outside.py", "C:\\Windows\\system.py", "/etc/passwd", "src/safe.py"))
 
@@ -130,6 +131,31 @@ class ContextSelectionServiceTest : BasePlatformTestCase() {
         assertEquals(first, service.activeConversationSessionId())
         assertEquals(listOf("batch-1"), service.currentSessionBatches().map { it.sessionId })
         assertFalse(service.switchConversationSession("missing-session"))
+    }
+
+    fun testSwitchingSessionsRestoresEachSessionDraftSelection() {
+        val service = project.getService(ContextSelectionService::class.java)
+        service.loadState(ContextSelectionService.Data())
+        val first = service.activeConversationSessionId()
+        service.addRelativePaths(listOf("src/first.py"))
+        service.excludeForSession("tests/first.py")
+        service.markExported("batch-first", "General change", listOf("src/first.py"), false)
+
+        service.startNewSession()
+        val second = service.activeConversationSessionId()
+        service.addRelativePaths(listOf("src/second.py"))
+        service.excludeForBatch("tests/second.py")
+        service.markExported("batch-second", "General change", listOf("src/second.py"), false)
+
+        assertTrue(service.switchConversationSession(first))
+        assertEquals(listOf("src/first.py"), service.pinnedPaths())
+        assertTrue("tests/first.py" in service.excludedAutomaticPaths())
+        assertFalse("tests/second.py" in service.excludedAutomaticPaths())
+
+        assertTrue(service.switchConversationSession(second))
+        assertEquals(listOf("src/second.py"), service.pinnedPaths())
+        assertTrue("tests/second.py" in service.excludedAutomaticPaths())
+        assertFalse("tests/first.py" in service.excludedAutomaticPaths())
     }
 
     fun testExclusionScopesHaveDistinctLifetimesAndIncludeOnceOverridesThem() {

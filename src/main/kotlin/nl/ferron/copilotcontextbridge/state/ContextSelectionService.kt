@@ -54,9 +54,30 @@ class ContextSelectionService(
 
         @JvmField var includeOncePaths: MutableList<String> = mutableListOf()
 
+        /** Draft selection and exclusion state retained for each conversation session. */
+        @JvmField var sessionDrafts: MutableList<ConversationDraftState> = mutableListOf()
+
         @JvmField var activeConversationSessionId: String = UUID.randomUUID().toString()
 
         @JvmField var nextBatchNumber: Int = 1
+    }
+
+    class ConversationDraftState {
+        @JvmField var sessionId: String = ""
+
+        @JvmField var pinnedPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var discoveryRoots: MutableList<String> = mutableListOf()
+
+        @JvmField var invalidPinnedPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var excludedThisBatchPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var excludedThisSessionPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var alwaysExcludedPaths: MutableList<String> = mutableListOf()
+
+        @JvmField var includeOncePaths: MutableList<String> = mutableListOf()
     }
 
     data class ConversationSessionSummary(
@@ -78,6 +99,7 @@ class ContextSelectionService(
         }
         if (data.activeConversationSessionId.isBlank()) data.activeConversationSessionId = UUID.randomUUID().toString()
         data.nextBatchNumber = data.nextBatchNumber.coerceAtLeast(1)
+        data.sessionDrafts.removeIf { it.sessionId.isBlank() }
         data.batches.forEachIndexed { index, batch ->
             if (batch.conversationSessionId.isBlank()) batch.conversationSessionId = data.activeConversationSessionId
             if (batch.batchNumber <= 0) batch.batchNumber = index + 1
@@ -261,25 +283,29 @@ class ContextSelectionService(
 
     fun activeConversationSessionId(): String = data.activeConversationSessionId
 
-    fun conversationSessions(): List<ConversationSessionSummary> =
-        data.batches
-            .groupBy { it.conversationSessionId }
-            .map { (id, batches) ->
+    fun conversationSessions(): List<ConversationSessionSummary> {
+        val batchesBySession = data.batches.groupBy { it.conversationSessionId }
+        val sessionIds =
+            (batchesBySession.keys + data.sessionDrafts.map { it.sessionId } + data.activeConversationSessionId)
+                .filter(String::isNotBlank)
+                .distinct()
+        return sessionIds
+            .map { id ->
+                val batches = batchesBySession[id].orEmpty()
                 ConversationSessionSummary(id, batches.size, batches.maxOfOrNull { it.createdAt }.orEmpty())
-            }.sortedByDescending { it.latestCreatedAt }
+            }.sortedWith(compareByDescending<ConversationSessionSummary> { it.latestCreatedAt }.thenBy { it.id })
+    }
 
     fun switchConversationSession(sessionId: String): Boolean {
         if (sessionId.isBlank() || sessionId == data.activeConversationSessionId) return false
-        if (sessionId !in data.batches.map { it.conversationSessionId }.toSet()) return false
+        val knownSessionIds =
+            data.batches.map { it.conversationSessionId }.toSet() + data.sessionDrafts.map { it.sessionId }
+        if (sessionId !in knownSessionIds) return false
+        saveDraft(data.activeConversationSessionId)
         data.activeConversationSessionId = sessionId
         data.nextBatchNumber =
             (data.batches.filter { it.conversationSessionId == sessionId }.maxOfOrNull { it.batchNumber } ?: 0) + 1
-        data.pinnedPaths.clear()
-        data.discoveryRoots.clear()
-        data.invalidPinnedPaths.clear()
-        data.excludedThisBatchPaths.clear()
-        data.includeOncePaths.clear()
-        data.excludedThisSessionPaths.clear()
+        restoreDraft(sessionId)
         fireChanged()
         return true
     }
@@ -315,10 +341,40 @@ class ContextSelectionService(
     }
 
     fun startNewSession() {
+        saveDraft(data.activeConversationSessionId)
         data.activeConversationSessionId = UUID.randomUUID().toString()
         data.nextBatchNumber = 1
         data.excludedThisSessionPaths.clear()
         clear()
+    }
+
+    private fun saveDraft(sessionId: String) {
+        if (sessionId.isBlank()) return
+        val draft =
+            data.sessionDrafts.firstOrNull { it.sessionId == sessionId }
+                ?: ConversationDraftState().also {
+                    it.sessionId = sessionId
+                    data.sessionDrafts.add(it)
+                }
+        draft.pinnedPaths = data.pinnedPaths.toMutableList()
+        draft.discoveryRoots = data.discoveryRoots.toMutableList()
+        draft.invalidPinnedPaths = data.invalidPinnedPaths.toMutableList()
+        draft.excludedThisBatchPaths = data.excludedThisBatchPaths.toMutableList()
+        draft.excludedThisSessionPaths = data.excludedThisSessionPaths.toMutableList()
+        draft.alwaysExcludedPaths = data.alwaysExcludedPaths.toMutableList()
+        draft.includeOncePaths = data.includeOncePaths.toMutableList()
+    }
+
+    private fun restoreDraft(sessionId: String) {
+        val draft = data.sessionDrafts.firstOrNull { it.sessionId == sessionId }
+        data.pinnedPaths = draft?.pinnedPaths?.toMutableList() ?: mutableListOf()
+        data.discoveryRoots = draft?.discoveryRoots?.toMutableList() ?: mutableListOf()
+        data.invalidPinnedPaths = draft?.invalidPinnedPaths?.toMutableList() ?: mutableListOf()
+        data.excludedThisBatchPaths = draft?.excludedThisBatchPaths?.toMutableList() ?: mutableListOf()
+        data.excludedThisSessionPaths = draft?.excludedThisSessionPaths?.toMutableList() ?: mutableListOf()
+        data.alwaysExcludedPaths = draft?.alwaysExcludedPaths?.toMutableList() ?: mutableListOf()
+        data.includeOncePaths = draft?.includeOncePaths?.toMutableList() ?: mutableListOf()
+        validatePaths()
     }
 
     fun restoreBatch(sessionId: String) {
