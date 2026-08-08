@@ -5,9 +5,9 @@ This record separates verified automated/install evidence from the still-pending
 ## Automated result
 
 - Gradle: 9.5.0.
-- Kotlin: 2.3.20.
+- Kotlin: 2.1.20.
 - Compilation target/toolchain: JDK 21 (`jvmToolchain(21)` and `JVM_21`).
-- Command: `.\gradlew.bat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-audit --no-daemon`.
+- Command: `.\gradlew.bat test ktlintCheck buildPlugin verifyPlugin -PccbBuildDir=build-final-livefix --no-daemon`.
 - Result: `BUILD SUCCESSFUL`; 50 suites and 188 tests, 0 failures, 0 errors and 0 skipped tests.
 - The same final-audit command rebuilt the ZIP and ran the verifier.
 - Plugin Verifier result: `Compatible` on PC-251.26927.90, PC-252.28539.58, PY-252.28539.58 and PY-262.8665.369. No incompatible API use was reported.
@@ -17,8 +17,10 @@ The Gradle launcher itself used the locally installed JDK 17. Gradle selected th
 ## ZIP and installer result
 
 - Repository ZIP: `build/distributions/copilot-context-bridge-1.0.0.zip`.
-- Size: 812144 bytes.
-- SHA-256: `09CB7E78E184A4EB44A0DA78150BFDA990D08954D0932A3FFF46EB03E9A223CD`.
+- Repository copy produced by `install.ps1`: 812234 bytes, SHA-256 `901AA4B35E7BA3C4691970B0DE214765C0F3831B0C934B7A404916A6C311E553`.
+- Final verification ZIP: `build-final-livefix/distributions/copilot-context-bridge-1.0.0.zip`.
+- Final verification size: 799730 bytes.
+- Final verification SHA-256: `90D69C1C91652CE0CDC3EBE6439B09DCFB85E6403E6386B04F9C623DDF4A5308`.
 - Archive inspection found one `copilot-context-bridge/` plugin root with the plugin and searchable-options JARs.
 - `install.ps1` completed successfully, rebuilt the current source and copied the ZIP into the repository distribution folder.
 - `install.ps1` completed successfully and atomically installed the current build to `%APPDATA%/JetBrains/PyCharm2026.2/plugins/copilot-context-bridge`.
@@ -41,7 +43,7 @@ PyCharm 2026.2.0.1 was launched with this repository after the final install. It
 - the project-scoped open-on-startup activity with `enabled=true`;
 - no `PluginException`, `ClassNotFoundException`, `NoClassDefFoundError` or plugin `ERROR` after that startup.
 
-The reviewed full-window screenshots [`L139-final-installed.png`](screenshots/live-audit/L139-final-installed.png) and [`L144-current-final.png`](screenshots/live-audit/L144-current-final.png) show the installed tool window with Batch/Import/Preview/More navigation, the persistent session selector, compact Pinned dropdown, ZIP drop zone, green Prepare action and the prompt card below the drag zone. These prove installation and the primary layout, but not every interactive behavior in the live matrix.
+The reviewed full-window screenshots [`L174-reinstalled-final.png`](screenshots/live-audit/L174-reinstalled-final.png), [`L148-after-prepare-correct-coordinates.png`](screenshots/live-audit/L148-after-prepare-correct-coordinates.png), [`L151-preview-tab.png`](screenshots/live-audit/L151-preview-tab.png), [`L152-more-tab.png`](screenshots/live-audit/L152-more-tab.png), [`L163-pinned-dropdown.png`](screenshots/live-audit/L163-pinned-dropdown.png), [`L166-automatic-dropdown-open.png`](screenshots/live-audit/L166-automatic-dropdown-open.png), [`L168-new-session-confirmed.png`](screenshots/live-audit/L168-new-session-confirmed.png), [`L169-session-selector.png`](screenshots/live-audit/L169-session-selector.png), [`L171-session-switched-old.png`](screenshots/live-audit/L171-session-switched-old.png), [`L172-prompt-skills.png`](screenshots/live-audit/L172-prompt-skills.png), [`L173-context-policy.png`](screenshots/live-audit/L173-context-policy.png), [`L154-structured-import-review.png`](screenshots/live-audit/L154-structured-import-review.png), [`L155-native-diff.png`](screenshots/live-audit/L155-native-diff.png), [`L156-import-confirmation.png`](screenshots/live-audit/L156-import-confirmation.png), [`L160-delete-confirmation-2.png`](screenshots/live-audit/L160-delete-confirmation-2.png) and [`L176-delete-warning-wrapped.png`](screenshots/live-audit/L176-delete-warning-wrapped.png) show the installed tool window, compact all-file dropdowns, prepared prompt, Preview/More screens, session switching, prompt policy editor and import/delete review flows. These prove installation and the exercised primary workflows, but not every interactive behavior in the live matrix.
 
 ## Visual acceptance status
 

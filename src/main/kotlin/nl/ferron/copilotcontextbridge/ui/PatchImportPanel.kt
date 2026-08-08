@@ -352,9 +352,17 @@ class PatchImportPanel(
                         )
                         if (item.request.operation == "delete_file") {
                             add(
-                                JLabel("⚠ Deletes this project file on Apply; PyCharm Undo can restore it.").apply {
+                                JBTextArea("⚠ Deletes this project file on Apply; PyCharm Undo can restore it.").apply {
+                                    isEditable = false
+                                    isFocusable = false
+                                    isOpaque = false
+                                    lineWrap = true
+                                    wrapStyleWord = true
                                     foreground = JBColor.RED
                                     font = font.deriveFont(Font.BOLD)
+                                    border = null
+                                    toolTipText = "Applying this selected operation deletes the project file. PyCharm Undo can restore it."
+                                    maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(38))
                                 },
                             )
                         }
